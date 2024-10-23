@@ -291,7 +291,7 @@ def f(s, x):
     return val
   
 
-def reseau(s):
+def reseau(s, verbose=False):
     """
         Computes the modes and eigenvalues in a structured layer
     """
@@ -342,6 +342,8 @@ def reseau(s):
     P = np.block([[inv_L],
                   [Lhe @ inv_L @ np.diag(1 / V)]])
     
+    if (verbose):
+        print("Kz found:", V)
 
     return (P, V)
 
@@ -357,7 +359,7 @@ def genere(ox, nx, eta, n):
     return np.array(fp).T # TODO: check whether transposing is necessary
 
 
-def homogene(s, ext=0):
+def homogene(s, ext=0, verbose=False):
     """
         Computing modes and eignevalues in a homogeneous layer
         Takes into account the possibility that it is the first or last layer
@@ -422,6 +424,8 @@ def homogene(s, ext=0):
                 ana_kz[3, j] = i
                 j += 1
         p = j
+        if (verbose):
+            print("Modes founds: ", p)
 
         # Compute the analytical eigen values (Rayleigh decomposition)
 
@@ -445,9 +449,15 @@ def homogene(s, ext=0):
                 # Computes the (ny, nx) diffracted order
                 if (np.abs(np.angle(gamma))<1e-4):
                     # Keeping only propagative modes
-                    ana_kz[0, nb_ana+1] = gamma
-                    ana_kz[1, nb_ana+1] = nx
-                    ana_kz[2, nb_ana+1] = ny
+                    if verbose:
+                        print("Found propagative mode nb ", nb_ana, ": gamma =", gamma)
+                    if (nb_ana+1 < p):
+                        ana_kz[0, nb_ana+1] = gamma
+                        ana_kz[1, nb_ana+1] = nx
+                        ana_kz[2, nb_ana+1] = ny
+                    else:
+                        print("Did not find enough modes! Continuing analytical mode computation, but it will break soon.")
+                        print(V)
                     nb_ana = nb_ana+1
                     if ((ny == 0) and (nx == 0)):
                         ana_kz[:3, 0] = ana_kz[:3, nb_ana]

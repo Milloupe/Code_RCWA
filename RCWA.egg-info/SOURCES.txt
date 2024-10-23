@@ -1,0 +1,11 @@
+README.md
+setup.py
+RCWA.egg-info/PKG-INFO
+RCWA.egg-info/SOURCES.txt
+RCWA.egg-info/dependency_links.txt
+RCWA.egg-info/requires.txt
+RCWA.egg-info/top_level.txt
+RCWA_project/__init__.py
+RCWA_project/base.py
+RCWA_project/bunch.py
+RCWA_project/materials.py
