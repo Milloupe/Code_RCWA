@@ -86,6 +86,7 @@ class Structure:
         self.thicknesses = thicknesses
         self.interfaces = interfaces
         self.period = interfaces[-1]
+        # self.interfaces = [t - self.period/2 for t in self.interfaces]
         self.homo_layer = homo_layer
         self.pmls = pmls
 

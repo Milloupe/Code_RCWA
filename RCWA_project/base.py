@@ -134,62 +134,32 @@ def genere(ox, nx, eta, n):
     return np.array(fp).T  # TODO: check whether transposing is necessary
 
 
-def tfd(old_a, old_b, new_a, new_b, eta, d, N):
+def tfd(a, b, eta, N):
     """
     Computing fourier transform of coordinates with stretching
+    We assume the period has been normalised to 1
     """
     pi = np.pi
     fft = np.zeros(2 * N + 1, dtype=complex)
-    old_ba = old_b - old_a
-    new_ba = new_b - new_a
+    ba = b - a
 
-    # Homogeneous layer, only one zone
-    # TODO: this doesn't really work, because the period is a direct multiple of the zone size
-    if old_a == new_a == 0 and old_b == new_b == d:
-        for i_mod in range(-N, N + 1):
-            if i_mod == 0:
-                fft[N] = 1
-            elif (i_mod == 1) or (i_mod == -1):
-                fft[i_mod + N] = -eta / 2
-            else:
-                fft[i_mod + N] = (
-                    -1
-                    / (2j * np.pi)
-                    * (np.exp(-2j * np.pi * i_mod) - 1)
-                    * (1 / i_mod + eta * i_mod / (1 - i_mod**2))
-                )
-    # Heterogeneous layer
-    else:
-        for i_mod in range(-N, N + 1):
-            sinc_prefac = (
-                old_ba
-                * i_mod
-                / d
-                * np.sinc(i_mod / d * new_ba)
-                * np.exp(-1.0j * np.pi * i_mod * (new_b + new_a) / d)
+    for i_mod in range(-N, N + 1):
+        sinc_prefac = (
+            ba
+            * i_mod
+            * np.sinc(i_mod * ba)
+            * np.exp(-1.0j * np.pi * i_mod * (b + a))
+        )
+
+        n_diff = i_mod * ba
+        if i_mod == 0:
+            fft[N] = ba
+        else:
+            # fft[i_mod + N] = prefac * (1/i_mod + eta/2 * (ba/(d-n_diff)-ba/(d+n_diff))) * (exp_kb-exp_ka)
+            fft[i_mod + N] = sinc_prefac * (
+                1 / i_mod
+                + eta / 2 * (ba / (1 - n_diff) - ba / (1 + n_diff))
             )
-
-            n_diff = i_mod * new_ba
-            if i_mod == 0:
-                fft[N] = old_ba / d
-            elif d - n_diff == 0:
-                # fft[i_mod + N] = prefac * (1/i_mod - eta/2 * new_ba/(d+n_diff)) * (exp_kb-exp_ka) - eta/2 * old_ba*np.exp(-2.0j*pi*new_a/new_ba)/d
-                fft[i_mod + N] = (
-                    sinc_prefac * (1 / i_mod - eta / 2 * new_ba / (d + n_diff))
-                    - eta / 2 * old_ba * np.exp(-2.0j * pi * new_a / new_ba) / d
-                )
-            elif d + n_diff == 0:
-                # fft[i_mod + N] = prefac * (1/i_mod + eta/2 * new_ba/(d-n_diff)) * (exp_kb-exp_ka) - eta/2 * old_ba*np.exp(2.0j*pi*new_a/new_ba)/d
-                fft[i_mod + N] = (
-                    sinc_prefac * (1 / i_mod + eta / 2 * new_ba / (d - n_diff))
-                    - eta / 2 * old_ba * np.exp(2.0j * pi * new_a / new_ba) / d
-                )
-            else:
-                # fft[i_mod + N] = prefac * (1/i_mod + eta/2 * (new_ba/(d-n_diff)-new_ba/(d+n_diff))) * (exp_kb-exp_ka)
-                fft[i_mod + N] = sinc_prefac * (
-                    1 / i_mod
-                    + eta / 2 * (new_ba / (d - n_diff) - new_ba / (d + n_diff))
-                )
     return fft
 
 

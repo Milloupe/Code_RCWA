@@ -158,7 +158,7 @@ def layer(V, h):
     return C
 
 
-def intermediaire(U, D):
+def intermediaire(U, D, mode="A"):
     """
     Cascading of two scattering matrices, U and D, but specifically when computing
     intermediate coefficients, and therefore some elements are 0.
@@ -166,15 +166,17 @@ def intermediaire(U, D):
     """
     n = U.shape[0] // 2
     U11 = U[n : 2 * n, n : 2 * n]
-    U10 = U[n : 2 * n, 0:n]
     D00 = D[0:n, 0:n]
+    U10 = U[n : 2 * n, 0:n]
 
-    H = np.linalg.inv(np.eye(n) - D00 @ U11)
-    K = np.linalg.inv(np.eye(n) - U11 @ D00)
-    a = K @ U10
-    c = H @ D00 @ U10
-    S = np.block([[c],
-                  [a]])
+    if mode == "A":
+        # Downwards coeff=
+        S = np.linalg.inv(np.eye(n) - D00 @ U11) @ D00 @ U10
+    
+    elif mode == "B":
+        # Upwards coeff
+        S = np.linalg.inv(np.eye(n) - U11 @ D00) @ U10
+
     return S
 
 
@@ -200,7 +202,7 @@ def f_prime(interf, eta, x):
     return f
 
 
-def layer_field(S_down, S_up, V, P, ny, nx, h, kx, n_mod):
+def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
     """
     Docstring for field
     
@@ -213,21 +215,25 @@ def layer_field(S_down, S_up, V, P, ny, nx, h, kx, n_mod):
     :param kx: Description
     :param n_mod: Description
     """
-    n_term = int(np.shape(S_down)[0] / 2)
+    n_term = int(np.shape(D_minus)[0] / 2)
     
     n_mod_total = 2*n_mod + 1
     exc = np.zeros(n_mod_total)  # excitation
     exc[n_mod] = 1
 
-
-    # X = intermediaire(S_down, base.cascade(layer(V,h), S_up)) @ exc
-    X = intermediaire(S_up, S_down) @ exc
-    layer_A = X[0:n_term]
-    # X = intermediaire(base.cascade(S_down, layer(V,h)), S_up) @ exc
-    layer_B = X[n_term:2*n_term]
-    print("Debugg layer_field, A ", np.angle(layer_A))
-    print("Debug layer_field, layer", S_down, S_up)
-    print("Debugg layer_field, B ", layer_B)
+    """
+        At this point, S_down is D-, S_up is U+
+        So to get A-, I need to cascade U+ one last time
+        And to get B+, I need to cascade D- one last time
+    """
+    layer_A = intermediaire(U_minus, D_minus, mode="A") @ exc
+    # X = intermediaire(S_up, S_down) @ exc
+    # layer_A = X[0:n_term]
+    layer_B = intermediaire(U_plus, D_plus, mode="B") @ exc
+    # layer_B = X[n_term:2*n_term]
+    # print("Debugg layer_field, A ", np.angle(layer_A))
+    # print("Debug layer_field, layer", S_down, S_up)
+    # print("Debugg layer_field, B ", layer_B)
 
     # The field values, computed at each position in the layer
     M = np.zeros((ny,nx), dtype = complex)
@@ -236,21 +242,22 @@ def layer_field(S_down, S_up, V, P, ny, nx, h, kx, n_mod):
     # print("Debugg layer_field, S shape", np.shape(S_layer), np.shape(S_up), np.shape(S_down))
 
 
-    kxs = np.pi * np.arange(-n_mod, n_mod + 1)
+    kxs = 2 *  np.pi * np.arange(-n_mod, n_mod + 1)
     # print("Debugg layer_field, V", V[n_mod], ", kxs", kxs, kxs[n_mod])
-    x = np.linspace(0,1,nx)
+    x = np.linspace(0, 1, nx)
+    # print("DEBUGG layer_field V", V)
     
     for k in range(ny):
         y = h / ny * k
         # Fourier = np.matmul(P,np.matmul(np.diag(np.exp(1j*V*y)),layer_A) + np.matmul(np.diag(np.exp(1j*V*(h-y))),layer_B))
-        phase_up = np.diag(np.exp(1j * V * -y))
+        phase_up = np.diag(np.exp(1j * V * (h-y)))
         phase_down = np.diag(np.exp(1j * V * y))
         A_phase = phase_up @ layer_A
         B_phase = phase_down @ layer_B
         Fourier = P[:n_term] @ (A_phase + B_phase) # Fourier decomposition of the field
         for i in range(len(kxs)):
             M[k,:] += Fourier[i] * np.exp(1.0j * x * kxs[i])
-            # print("Debug layer_field big", i, k, kxs[i], np.shape(Fourier))#, M[k,:])
+        # print("Debug layer_field phasedown", np.diag(phase_down))#, M[k,:])
 
         # # temp = np.fft.ifftshift(Fourier[0:len(Fourier)-1])
         # print(f"Debugg layer_field, x shape {np.shape(x)}, kxs shape {np.shape(kxs)}, Fourier shape {np.shape(Fourier)}")
@@ -277,7 +284,7 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     theta, pol = incidence  # In 1D, only one angle of incidence is necessary
     k0 = 2 * np.pi / wavelength_norm
     kx = k0 * np.sin(theta)
-    print(f"Debugg compute_field, k0 {k0}, , kx {kx}, kx/k0 {kx/k0}, period {struct.period}, wav {wavelength}")
+    # print(f"Debugg compute_field, k0 {k0}, , kx {kx}, kx/k0 {kx/k0}, period {struct.period}, wav {wavelength}")
 
     if not PV is None:
         print("Ps and Vs were given")
@@ -304,39 +311,47 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
         I.append(base.interface(Ps[k], Ps[k + 1]))
 
     # Intermediate S matrices starting from the top
-    S_up = []
-    S_up.append(S0) # We use the neutral S matrix at the top, because the fields are already counted from the top
+    U_plus = []
+    U_minus = []
+    U_plus.append(S0) # We use the neutral S matrix at the top, because the fields are already counted from the top
+    U_minus.append(layer(Vs[0], thickness[0]))
     for k in range(n_layers - 1):
         # matlab ref:
         # S{j+1} =cascade(S{j},c_haut(I{j},V{j},thickness(j)));
-        S_new = base.cascade(S_up[k], base.c_up(I[k], Vs[k], thickness[k]))
-        S_up.append(S_new)
+        S_new = base.cascade(U_plus[k], base.c_up(I[k], Vs[k], thickness[k]))
+        U_plus.append(S_new)
+        U_minus.append(base.c_down(S_new, Vs[k+1], thickness[k+1]))
 
 
     # Intermediate S matrices starting from the bottom
-    S_down = []
-    S_down.append(layer(Vs[-1], thickness[-1]))
+    D_minus = []
+    D_plus = []
+    D_minus.append(S0)
+    D_plus.append(layer(Vs[-1], thickness[-1]))
 
-    for k in range(n_layers - 1):
+    for k in range(n_layers - 1, 0, -1):
         # matlab ref : 
         # Q{j+1}=cascade(c_bas(I{n_couches-j},A{n_couches-j+1,2},thickness(n_couches-j+1)),Q{j});
-        n_lay_up = n_layers - (k + 2)
-        print("Debug compute_field_1D, S down", len(Vs), n_lay_up)
+        # n_lay_up = n_layers - (k + 1)
+        # print("Debug compute_field_1D, S down", len(Vs), k)
         
-        S_new = base.cascade(base.c_up(I[n_lay_up], Vs[n_lay_up], thickness[n_lay_up]), S_down[0])
-        S_down.insert(0, S_new)
+        S_new = base.cascade(base.c_down(I[k-1], Vs[k], thickness[k]), D_minus[0])
+        D_minus.insert(0, S_new)
+        D_plus.insert(0, base.c_up(S_new, Vs[k-1], thickness[k-1]))
 
     # S_down.insert(0, base.c_up(S_down[0], Vs[0], thickness[0]))
 
-    print("Debugg compute_field_1D, shapes", len(S_up), len(S_down))
+    # print("Debugg compute_field_1D, shapes", len(U_plus), len(D_minus))
 
     ny = np.floor(thickness * struct.period / z_res)
     nx = int(np.floor(struct.period / xres))
     print("sizes", ny, nx)
 
     M = layer_field(
-        np.array(S_down[0]),
-        np.array(S_up[0]),
+        np.array(D_minus[0]),
+        np.array(U_minus[0]),
+        np.array(D_plus[0]),
+        np.array(U_plus[0]),
         np.array(Vs[0]),
         np.array(Ps[0]),
         int(ny[0]),
@@ -345,12 +360,14 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
         kx,
         n_mod
     )
-    print("Debugg compute_field_1D, ilayer 0, ,M", np.shape(M))
+    # print("Debugg compute_field_1D, ilayer 0, ,M", np.shape(M))
 
     for j in np.arange(1, n_layers):
         M_new = layer_field(
-            np.array(S_down[j]),
-            np.array(S_up[j]),
+            np.array(D_minus[j]),
+            np.array(U_minus[j]),
+            np.array(D_plus[j]),
+            np.array(U_plus[j]),
             np.array(Vs[j]),
             np.array(Ps[j]),
             int(ny[j]),
@@ -359,13 +376,13 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
             kx,
             n_mod
         )
-        print("Debugg compute_field_1D, ilayer", j, ", Mnew", np.shape(M_new))
+        # print("Debugg compute_field_1D, ilayer", j, ", Mnew", np.shape(M_new))
         M = np.append(M, M_new, 0)
     M = np.array(M)
-    print("Debugg compute_field_1D, M phase", 
-          M[0, 0],
-          np.angle(M[int(ny[0]), 0]),
-          np.angle(M[int(ny[0])-1, 0]))
+    # print("Debugg compute_field_1D, M phase", 
+        #   M[0, 0],
+        #   (M[int(ny[0]), 0]),
+        #   (M[int(ny[0])-1, 0]))
 
     xs = np.linspace(0, struct.period, nx)[::-1]
     zs = np.linspace(0, sum(struct.thicknesses), int(sum(ny)))[::-1]
