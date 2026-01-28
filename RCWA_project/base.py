@@ -139,27 +139,19 @@ def tfd(a, b, eta, N):
     Computing fourier transform of coordinates with stretching
     We assume the period has been normalised to 1
     """
-    pi = np.pi
     fft = np.zeros(2 * N + 1, dtype=complex)
     ba = b - a
 
     for i_mod in range(-N, N + 1):
-        sinc_prefac = (
-            ba
-            * i_mod
-            * np.sinc(i_mod * ba)
-            * np.exp(-1.0j * np.pi * i_mod * (b + a))
-        )
+        sin_prefac = (1/np.pi * np.sin(np.pi * i_mod * ba) * np.exp(-1.0j * np.pi * i_mod * (b + a))        )
 
         n_diff = i_mod * ba
         if i_mod == 0:
             fft[N] = ba
         else:
+            stretch = eta / 2 * (ba / (1 - n_diff) - ba / (1 + n_diff))
             # fft[i_mod + N] = prefac * (1/i_mod + eta/2 * (ba/(d-n_diff)-ba/(d+n_diff))) * (exp_kb-exp_ka)
-            fft[i_mod + N] = sinc_prefac * (
-                1 / i_mod
-                + eta / 2 * (ba / (1 - n_diff) - ba / (1 + n_diff))
-            )
+            fft[i_mod + N] = sin_prefac * (1 / i_mod + stretch)
     return fft
 
 

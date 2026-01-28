@@ -10,38 +10,9 @@ import RCWA_project.base as base
     -> eventually, the 'structure' class will let me check the validity of the structure!
 """
 
-def compute_PV(struct, wavelength, interfaces, k0, kx, pol, Mm):
-    """
-    Docstring for compute_PV
-    
-    :param struct: Description
-    :param wavelength: Description
-    :param interfaces: Description
-    :param k0: Description
-    :param kx: Description
-    :param pol: Description
-    :param Mm: Description
-    """
-    Ps = []
-    Vs = []
-    nb_layer = len(struct.layers)
-
-    for ilayer in range(nb_layer):
-        layer = struct.layers[ilayer]
-        homo = struct.homo_layer[ilayer]
-        if homo:
-            epsilon = layer[0].get_permittivity(wavelength)
-            eig_vec, eig_val = compute1D.homogeneous(epsilon, k0, kx, pol, Mm)
-        else:
-            epsilons = [mat.get_permittivity(wavelength) for mat in layer]
-            eig_vec, eig_val = compute1D.structured(epsilons, interfaces, k0, kx, pol, Mm) 
-
-        Ps.append(eig_vec)
-        Vs.append(eig_val)
-    return Ps, Vs
 
 
-def coefficient_1D(struct, wavelength, incidence, n_mod):
+def coefficient_1D(struct, wavelength, incidence, n_mod, eta=0):
     """
     This function computes the reflection and transmission coefficients
     of a 1D struct when the incidence plane is the same as the struct plane.
@@ -72,8 +43,7 @@ def coefficient_1D(struct, wavelength, incidence, n_mod):
     interfaces = np.array(struct.interfaces) / struct.period
     nb_layer = len(struct.thicknesses)
     # pmls = struct.pmls # So far, no pmls in 1D because no stretching
-
-    Ps, Vs = compute_PV(struct, wavelength, interfaces, k0, kx, pol, n_mod)
+    Ps, Vs = compute1D.compute_PV(struct, wavelength, interfaces, k0, kx, pol, n_mod, eta=eta)
 
     for ilayer in range(nb_layer):
         thickness = np.array(struct.thicknesses[ilayer]) / struct.period
@@ -290,7 +260,7 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
         print("Ps and Vs were given")
         Ps, Vs = PV
     else:
-        Ps, Vs = compute_PV(struct, wavelength, interfaces, k0, kx, pol, n_mod)
+        Ps, Vs = compute1D.compute_PV(struct, wavelength, interfaces, k0, kx, pol, n_mod)
 
     # Normalisation
 
