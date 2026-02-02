@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "RCWA"
+authors = [
+  {name = "Denis Langevin", email = "denis.langevin@univ-amu.fr"},
+  {name = "Antoine Moreau", email = "antoine.moreau@uca.fr"}]
+version = "0.9"
+description = "A scattering matrix formalism to solve Maxwell's equations in any structure."
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+keywords = ["Plasmonics", "Photonics"]
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Programming Language :: Python :: 3",
+]
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "scipy",
+  "refractiveindex; python_version >= '3.10'"
+]
+
+
+[project.urls]
+# Homepage = "https://github.com/AnMoreau/PyMoosh"
+# Repository = "https://github.com/AnMoreau/PyMoosh/stable"
+# Documentation = "https://github.com/AnMoreau/PyMoosh#readme"
+
+[tool.setuptools.packages.find]
+include = ["RCWA_project"]
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
