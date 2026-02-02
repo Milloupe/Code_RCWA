@@ -84,8 +84,19 @@ class Structure:
 
         self.layers = layers
         self.thicknesses = thicknesses
-        self.interfaces = interfaces
-        self.period = interfaces[-1]
+        if len(np.shape(layers[0])) == 1:
+            self.interfaces = interfaces
+            self.period = interfaces[-1]
+            self.type = "1D"
+        elif len(np.shape(layers[0])) == 2:
+            self.int_x = interfaces[0]
+            self.int_y = interfaces[1]
+            self.periodx = self.int_x[-1]
+            self.periody = self.int_y[-1]
+            self.type = "2D"
+        else:
+            print("There should be either one array of interfaces or two")
+            return None
         # self.interfaces = [t - self.period/2 for t in self.interfaces]
         self.homo_layer = homo_layer
         self.pmls = pmls
@@ -97,10 +108,16 @@ class Structure:
     #     return s
 
     def get_perm_top(self, wavelength):
-        return self.layers[0][0].get_permittivity(wavelength)
-    
+        if self.type == "1D":
+            return self.layers[0][0].get_permittivity(wavelength)
+        else:
+            return self.layers[0][0, 0].get_permittivity(wavelength)
+
     def get_perm_bot(self, wavelength):
-        return self.layers[-1][0].get_permittivity(wavelength)
+        if self.type == "1D":
+            return self.layers[-1][0].get_permittivity(wavelength)
+        else:
+            return self.layers[-1][0, 0].get_permittivity(wavelength)
 
     def polarizability(self, wavelength):
         # TODO: this will have to change completely, or maybe not even be used

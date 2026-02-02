@@ -3,6 +3,67 @@ import RCWA_project.base as base
 import scipy.linalg as lin
 
 
+def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, pml, eta=0):
+    """
+    Docstring for compute_PV
+
+    :param struct: Description
+    :param wavelength: Description
+    :param interfaces: Description
+    :param k0: Description
+    :param kx: Description
+    :param pol: Description
+    :param Mm: Description
+    """
+    Ps = []
+    Vs = []
+    nb_layer = len(struct.layers)
+
+    if not (struct.homo_layer[0]):
+        print(
+            "The first layer must be homogeneous, otherwise planewaves don't make sense"
+        )
+        return None
+    else:
+        layer = struct.layers[0]
+        epsilons = np.array(
+            [[m.get_permittivity(wavelength) for m in mat] for mat in layer]
+        )
+        mus = np.array([[m.get_permeability(wavelength) for m in mat] for mat in layer])
+        eig_vec, eig_val, ext = homogeneous(
+            epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=1
+        )
+        Ps.append(eig_vec)
+        Vs.append(eig_val)
+    for ilayer in range(1, nb_layer):
+        layer = struct.layers[ilayer]
+        homo = struct.homo_layer[ilayer]
+        if homo:
+            epsilons = np.array(
+                [[m.get_permittivity(wavelength) for m in mat] for mat in layer]
+            )
+            mus = np.array(
+                [[m.get_permeability(wavelength) for m in mat] for mat in layer]
+            )
+            eig_vec, eig_val = homogeneous(
+                epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0
+            )
+        else:
+            epsilons = np.array(
+                [[m.get_permittivity(wavelength) for m in mat] for mat in layer]
+            )
+            mus = np.array(
+                [[m.get_permeability(wavelength) for m in mat] for mat in layer]
+            )
+            eig_vec, eig_val = structured(
+                epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta
+            )
+
+        Ps.append(eig_vec)
+        Vs.append(eig_val)
+    return Ps, Vs, ext
+
+
 def eps_x(perm, int_x, int_y, pml, eta, modes):
     """
     eps * g(y) / f(x)
@@ -13,23 +74,23 @@ def eps_x(perm, int_x, int_y, pml, eta, modes):
     pmlx, pmly = pml
 
     T = np.zeros((m, m, len(perm)), dtype=complex)
-    for l in range(len(perm)):
+    for i_y in range(len(perm)):
         v = 0
-        for j in range(len(perm[0])):
-            a, b = int_x[j], int_x[j+1]
+        for i_x in range(len(perm[0])):
+            a, b = int_x[i_x] / int_x[-1], int_x[i_x + 1] / int_x[-1]
             tfx = base.tfd(a, b, eta, m)
-            v = v + 1 / perm[l, j] * tfx * (1 + 1.0j * pmlx[j])  # f / eps
+            v = v + 1 / perm[i_y, i_x] * tfx * (1 + 1.0j * pmlx[i_x])  # f / eps
         v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
-        T[:, :, l] = np.linalg.inv(base.toep(v))  # eps / f
+        T[:, :, i_y] = np.linalg.inv(base.toep(v))  # eps / f
 
     M = np.zeros((m * n, m * n), dtype=complex)
     for j in range(m):
         for k in range(m):
             v = 0
-            for l in range(len(perm)):
-                a, b = int_y[l], int_y[l+1]
+            for i_y in range(len(perm)):
+                a, b = int_y[i_y] / int_y[-1], int_y[i_y + 1] / int_y[-1]
                 tfy = base.tfd(a, b, eta, n)
-                v = v + T[j, k, l] * tfy * (1 + 1.0j * pmly[l])  # eps / f * g
+                v = v + T[j, k, i_y] * tfy * (1 + 1.0j * pmly[i_y])  # eps / f * g
             M[j * n : (j + 1) * n, k * n : (k + 1) * n] = base.toep(v)  # eps / f * g
 
     return M
@@ -41,28 +102,28 @@ def eps_y(perm, int_x, int_y, pml, eta, modes):
     """
     Mm, Nm = modes
     n = 2 * Nm + 1
-    m = 2 *  Mm + 1
+    m = 2 * Mm + 1
     pmlx, pmly = pml
 
     T = np.zeros((m, m, len(perm)), dtype=complex)
-    for l in range(len(perm)):
+    for i_y in range(len(perm)):
         v = 0
-        for j in range(len(perm[0])):
-            a, b = int_x[j], int_x[j+1]
+        for i_x in range(len(perm[0])):
+            a, b = int_x[i_x] / int_x[-1], int_x[i_x + 1] / int_x[-1]
             tfx = base.tfd(a, b, eta, m)
-            v = v + perm[l, j] * tfx * (1 + 1.0j * pmlx[j])  # eps * f
+            v = v + perm[i_y, i_x] * tfx * (1 + 1.0j * pmlx[i_x])  # eps * f
         v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
-        T[:, :, l] = base.toep(v)  # eps * f
+        T[:, :, i_y] = base.toep(v)  # eps * f
 
     M = np.zeros((m * n, m * n), dtype=complex)
     for j in range(m):
         for k in range(m):
             v = 0
-            for l in range(len(perm)):
-                a, b = int_y[l], int_y[l+1]
+            for i_y in range(len(perm)):
+                a, b = int_y[i_y] / int_y[-1], int_y[i_y + 1] / int_y[-1]
                 tfy = base.tfd(a, b, eta, n)
-                v = v + 1 / T[j, k, l] * tfy * (
-                    1 + 1.0j * pmly[l]
+                v = v + 1 / T[j, k, i_y] * tfy * (
+                    1 + 1.0j * pmly[i_y]
                 )  # 1 / (eps * f) * g
             M[j * n : (j + 1) * n, k * n : (k + 1) * n] = np.linalg.inv(
                 base.toep(v)
@@ -77,29 +138,29 @@ def eps_z(perm, int_x, int_y, pml, eta, modes):
     """
     Mm, Nm = modes
     n = 2 * Nm + 1
-    m = 2 *  Mm + 1
+    m = 2 * Mm + 1
     pmlx, pmly = pml
 
     T = np.zeros((m, m, len(perm)), dtype=complex)
-    for l in range(len(perm)):
+    for i_y in range(len(perm)):
         v = 0
-        for j in range(len(perm[0])):
-            a, b = int_x[j], int_x[j+1]
+        for i_x in range(len(perm[0])):
+            a, b = int_x[i_x] / int_x[-1], int_x[i_x + 1] / int_x[-1]
             tfx = base.tfd(a, b, eta, m)
 
-            v = v + perm[l, j] * tfx * (1 + 1.0j * pmlx[j])  # eps * f
+            v = v + perm[i_y, i_x] * tfx * (1 + 1.0j * pmlx[i_x])  # eps * f
 
         v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
-        T[:, :, l] = base.toep(v)  # eps * f
+        T[:, :, i_y] = base.toep(v)  # eps * f
     M = np.zeros((m * n, m * n), dtype=complex)
     for j in range(m):
         for k in range(m):
             v = 0
-            for l in range(len(perm)):
-                a, b = int_y[l], int_y[l+1]
+            for i_y in range(len(perm)):
+                a, b = int_y[i_y] / int_y[-1], int_y[i_y + 1] / int_y[-1]
                 tfy = base.tfd(a, b, eta, n)
 
-                v = v + T[j, k, l] * tfy * (1 + 1.0j * pmly[l])  # eps * f * g
+                v = v + T[j, k, i_y] * tfy * (1 + 1.0j * pmly[i_y])  # eps * f * g
             M[j * n : (j + 1) * n, k * n : (k + 1) * n] = base.toep(v)  # eps * f * g
 
     return M
@@ -111,27 +172,27 @@ def mu_x(perm, int_x, int_y, pml, eta, modes):
     """
     Mm, Nm = modes
     n = 2 * Nm + 1
-    m = 2 *  Mm + 1
+    m = 2 * Mm + 1
     pmlx, pmly = pml
 
     T = np.zeros((m, m, len(perm)), dtype=complex)
-    for l in range(len(perm)):
+    for i_y in range(len(perm)):
         v = 0
-        for j in range(len(perm[0])):
-            a, b = int_x[j], int_x[j+1]
+        for i_x in range(len(perm[0])):
+            a, b = int_x[i_x] / int_x[-1], int_x[i_x + 1] / int_x[-1]
             tfx = base.tfd(a, b, eta, m)
-            v = v + 1 / perm[l, j] * tfx * (1 + 1.0j * pmlx[j])  # f / mu
+            v = v + 1 / perm[i_y, i_x] * tfx * (1 + 1.0j * pmlx[i_x])  # f / mu
         v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
-        T[:, :, l] = np.linalg.inv(base.toep(v))  # mu / f
+        T[:, :, i_y] = np.linalg.inv(base.toep(v))  # mu / f
 
     M = np.zeros((m * n, m * n), dtype=complex)
     for j in range(m):
         for k in range(m):
             v = 0
-            for l in range(len(perm)):
-                a, b = int_y[l], int_y[l+1]
+            for i_y in range(len(perm)):
+                a, b = int_y[i_y] / int_y[-1], int_y[i_y + 1] / int_y[-1]
                 tfy = base.tfd(a, b, eta, n)
-                v = v + T[j, k, l] * tfy * (1 + 1.0j * pmly[l])  # mu / f * g
+                v = v + T[j, k, i_y] * tfy * (1 + 1.0j * pmly[i_y])  # mu / f * g
             M[j * n : (j + 1) * n, k * n : (k + 1) * n] = base.toep(v)  # mu / f * g
 
     return M
@@ -143,30 +204,30 @@ def mu_y(perm, int_x, int_y, pml, eta, modes):
     """
     Mm, Nm = modes
     n = 2 * Nm + 1
-    m = 2 *  Mm + 1
+    m = 2 * Mm + 1
     pmlx, pmly = pml
 
     T = np.zeros((m, m, len(perm)), dtype=complex)
-    for l in range(len(perm)):
+    for i_y in range(len(perm)):
         v = 0
-        for j in range(len(perm[0])):
-            a, b = int_x[j], int_x[j+1]
+        for i_x in range(len(perm[0])):
+            a, b = int_x[i_x] / int_x[-1], int_x[i_x + 1] / int_x[-1]
             tfx = base.tfd(a, b, eta, m)
 
-            v = v + perm[l, j] * tfx * (1 + 1.0j * pmlx[j])  # mu * f
+            v = v + perm[i_y, i_x] * tfx * (1 + 1.0j * pmlx[i_x])  # mu * f
 
         v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
-        T[:, :, l] = base.toep(v)  # mu * f
+        T[:, :, i_y] = base.toep(v)  # mu * f
 
     M = np.zeros((m * n, m * n), dtype=complex)
     for j in range(m):
         for k in range(m):
             v = 0
-            for l in range(len(perm)):
-                a, b = int_y[l], int_y[l+1]
+            for i_y in range(len(perm)):
+                a, b = int_y[i_y] / int_y[-1], int_y[i_y + 1] / int_y[-1]
                 tfy = base.tfd(a, b, eta, n)
-                v = v + 1 / T[j, k, l] * tfy * (
-                    1 + 1.0j * pmly[l]
+                v = v + 1 / T[j, k, i_y] * tfy * (
+                    1 + 1.0j * pmly[i_y]
                 )  # 1  / (mu * f) * g
             M[j * n : (j + 1) * n, k * n : (k + 1) * n] = np.linalg.inv(
                 base.toep(v)
@@ -180,27 +241,27 @@ def mu_z(perm, int_x, int_y, pml, eta, modes):
     """
     Mm, Nm = modes
     n = 2 * Nm + 1
-    m = 2 *  Mm + 1
+    m = 2 * Mm + 1
     pmlx, pmly = pml
 
     T = np.zeros((m, m, len(perm)), dtype=complex)
-    for l in range(len(perm)):
+    for i_y in range(len(perm)):
         v = 0
-        for j in range(len(perm[0])):
-            a, b = int_x[j], int_x[j+1]
+        for i_x in range(len(perm[0])):
+            a, b = int_x[i_x] / int_x[-1], int_x[i_x + 1] / int_x[-1]
             tfx = base.tfd(a, b, eta, m)
-            v = v + perm[l, j] * tfx * (1 + 1.0j * pmlx[j])  # mu * f
+            v = v + perm[i_y, i_x] * tfx * (1 + 1.0j * pmlx[i_x])  # mu * f
         v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
-        T[:, :, l] = base.toep(v)  # mu * f
+        T[:, :, i_y] = base.toep(v)  # mu * f
 
     M = np.zeros((m * n, m * n), dtype=complex)
     for j in range(m):
         for k in range(m):
             v = 0
-            for l in range(len(perm)):
-                a, b = int_y[l], int_y[l+1]
+            for i_y in range(len(perm)):
+                a, b = int_y[i_y] / int_y[-1], int_y[i_y + 1] / int_y[-1]
                 tfy = base.tfd(a, b, eta, n)
-                v = v + T[j, k, l] * tfy * (1 + 1.0j * pmly[l])  # mu * f * g
+                v = v + T[j, k, i_y] * tfy * (1 + 1.0j * pmly[i_y])  # mu * f * g
             M[j * n : (j + 1) * n, k * n : (k + 1) * n] = base.toep(v)  # mu * f * g
 
     return M
@@ -217,9 +278,7 @@ def g(int_y, y, eta):
     new_diff = int_y[j + 1] - int_y[j]
     new_k = 2 * np.pi / new_diff
 
-    val = int_y[j] +  (
-        y - int_y[j] - eta * np.sin(new_k * (y - int_y[j])) / new_k
-    )
+    val = int_y[j] + (y - int_y[j] - eta * np.sin(new_k * (y - int_y[j])) / new_k)
     return val
 
 
@@ -234,9 +293,7 @@ def f(int_x, x, eta):
     new_diff = int_x[j + 1] - int_x[j]
     new_k = 2 * np.pi / new_diff
 
-    val = int_x[j] +  (
-        x - int_x[j] - eta * np.sin(new_k * (x - int_x[j])) / new_k
-    )
+    val = int_x[j] + (x - int_x[j] - eta * np.sin(new_k * (x - int_x[j])) / new_k)
     return val
 
 
@@ -250,11 +307,11 @@ def structured(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, verbose
 
     v_a = []
     for j in range(-Mm, Mm + 1):
-        a = kx + 2 * np.pi * j 
+        a = kx + 2 * np.pi * j / int_x[-1]
         v_a.extend([a] * n)
     alpha = 1.0j * np.diag(v_a)
 
-    v_b = ky + 2 * np.pi * np.arange(-Nm, Nm + 1)
+    v_b = ky + 2 * np.pi * np.arange(-Nm, Nm + 1) / int_y[-1]
     v_b = np.tile(v_b, (m))
     beta = 1.0j * np.diag(v_b)
 
@@ -264,10 +321,19 @@ def structured(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, verbose
     alpha_eps_alpha = alpha @ inv_e33 @ alpha
     beta_eps_beta = beta @ inv_e33 @ beta
     beta_eps_alpha = beta @ inv_e33 @ alpha
+
+    muy = mu_y(mus, int_x, int_y, pml, eta, modes)
+    mux = mu_x(mus, int_x, int_y, pml, eta, modes)
     Leh = np.block(
         [
-            [alpha_eps_beta, 1.0j * k0 * mu_y(mus, int_x, int_y, pml, eta, modes) - alpha_eps_alpha],
-            [-1.0j * k0 * mu_x(mus, int_x, int_y, pml, eta, modes) + beta_eps_beta, -beta_eps_alpha],
+            [
+                alpha_eps_beta,
+                1.0j * k0 * muy - alpha_eps_alpha,
+            ],
+            [
+                -1.0j * k0 * mux + beta_eps_beta,
+                -beta_eps_alpha,
+            ],
         ]
     )
 
@@ -276,10 +342,19 @@ def structured(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, verbose
     alpha_mu_alpha = alpha @ inv_mu_z @ alpha
     beta_mu_beta = beta @ inv_mu_z @ beta
     beta_mu_alpha = beta @ inv_mu_z @ alpha
+
+    epsy = eps_y(epsilons, int_x, int_y, pml, eta, modes)
+    epsx = eps_x(epsilons, int_x, int_y, pml, eta, modes)
     Lhe = np.block(
         [
-            [-alpha_mu_beta, -1.0j * k0 * eps_y(epsilons, int_x, int_y, pml, eta, modes) + alpha_mu_alpha],
-            [1.0j * k0 * eps_x(epsilons, int_x, int_y, pml, eta, modes) - beta_mu_beta, beta_mu_alpha],
+            [
+                -alpha_mu_beta,
+                -1.0j * k0 * epsy + alpha_mu_alpha,
+            ],
+            [
+                1.0j * k0 * epsx - beta_mu_beta,
+                beta_mu_alpha,
+            ],
         ]
     )
 
@@ -313,7 +388,9 @@ def structured(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, verbose
 #     return np.array(fp).T  # TODO: check whether transposing is necessary
 
 
-def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0, verbose=False):
+def homogeneous(
+    epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0, verbose=False
+):
     """
     Computing modes and eignevalues in a homogeneous layer
     Takes into account the possibility that it is the first or last layer
@@ -322,14 +399,16 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
     Mm, Nm = modes
     n_mode_y = 2 * Nm + 1
     n_mode_x = 2 * Mm + 1
+    dx = int_x[-1]
+    dy = int_y[-1]
 
     v_a = []
     for j in range(-Mm, Mm + 1):
-        a = kx + 2 * np.pi * j
+        a = kx + 2 * np.pi * j / dx
         v_a.extend([a] * n_mode_y)
     alpha = 1.0j * np.diag(v_a)
 
-    v_b = ky + 2 * np.pi * np.arange(-Nm, Nm + 1)
+    v_b = ky + 2 * np.pi * np.arange(-Nm, Nm + 1) / dy
     v_b = np.tile(v_b, (n_mode_x))
     beta = 1.0j * np.diag(v_b)
 
@@ -340,7 +419,7 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
     mux = mu_x(mus, int_x, int_y, pml, eta, modes)
     muy = mu_y(mus, int_x, int_y, pml, eta, modes)
     L = (
-        -k0**2 * muy @ epsx
+        -(k0**2) * muy @ epsx
         - alpha @ i_eps_z @ alpha @ epsx
         - muy @ beta @ i_mu_z @ beta
     )
@@ -348,14 +427,19 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
     [B, A] = np.linalg.eig(L)
 
     L = (
-        -k0**2 * mux @ epsy
+        -(k0**2) * mux @ epsy
         - beta @ i_eps_z @ beta @ epsy
         - mux @ alpha @ i_mu_z @ alpha
     )
 
     [D, C] = np.linalg.eig(L)
 
-    E = np.block([[A, np.zeros((n_mode_y * n_mode_x, n_mode_y * n_mode_x))], [np.zeros((n_mode_y * n_mode_x, n_mode_y * n_mode_x)), C]])
+    E = np.block(
+        [
+            [A, np.zeros((n_mode_y * n_mode_x, n_mode_y * n_mode_x))],
+            [np.zeros((n_mode_y * n_mode_x, n_mode_y * n_mode_x)), C],
+        ]
+    )
 
     inv_mu_z = i_mu_z / (1.0j * k0)
     alpha_mu_beta = alpha @ inv_mu_z @ beta
@@ -364,8 +448,16 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
     beta_mu_alpha = beta @ inv_mu_z @ alpha
     Lhe = np.block(
         [
-            [-alpha_mu_beta, -1.0j * k0 * eps_y(epsilons, int_x, int_y, pml, eta, modes) + alpha_mu_alpha],
-            [1.0j * k0 * eps_x(epsilons, int_x, int_y, pml, eta, modes) - beta_mu_beta, beta_mu_alpha],
+            [
+                -alpha_mu_beta,
+                -1.0j * k0 * eps_y(epsilons, int_x, int_y, pml, eta, modes)
+                + alpha_mu_alpha,
+            ],
+            [
+                1.0j * k0 * eps_x(epsilons, int_x, int_y, pml, eta, modes)
+                - beta_mu_beta,
+                beta_mu_alpha,
+            ],
         ]
     )
 
@@ -381,76 +473,94 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
 
         # Finding real eigen values and their positions in V
         nb_real = np.sum(abs(np.angle(V)) < 1e-4)
-        ana_kz = np.zeros((4, nb_real), dtype=complex)
+        ana_kz_pos = np.zeros(nb_real, dtype=int)
+        ana_kz_nx = np.zeros(nb_real, dtype=int)
+        ana_kz_ny = np.zeros(nb_real, dtype=int)
+        ana_kz = np.zeros(nb_real, dtype=complex)
         j = 0
         for i in range(len(V)):
             if abs(np.angle(V[i])) < 1e-4:
-                ana_kz[3, j] = i
+                ana_kz_pos[j] = i
                 j += 1
-        p = j
+
         if verbose:
-            print("Modes founds: ", p)
+            print("Modes founds: ", nb_real)
 
         # Compute the analytical eigen values (Rayleigh decomposition)
 
-
         k = np.sqrt(epsilons[0, 0] * mus[0, 0]) * k0  # DEBUGG CHANGED [1, 1] TO [0, 0]
+        min_kx = (k + kx) * dx / 2 * np.pi
+        max_kx = (k - kx) * dx / 2 * np.pi
+        min_ky = (k + ky) * dy / 2 * np.pi
+        max_ky = (k - ky) * dy / 2 * np.pi
+        min_ord_x = -np.floor(np.real(min_kx)).astype(int)
+        max_ord_x = np.floor(np.real(max_kx)).astype(int)
+        min_ord_y = -np.floor(np.real(min_ky)).astype(int)
+        max_ord_y = np.floor(np.real(max_ky)).astype(int)
 
-        min_ord_x = int((k + kx) / 2 * np.pi)
-        max_ord_x = int((k - kx) / 2 * np.pi)
-        min_ord_y = int((k + ky) / 2 * np.pi)
-        max_ord_y = int((k - ky) / 2 * np.pi)
-
-        # TODO: check is correct, changed max ord from dx to 1/kx
-        nb_ana = 0
-        for nx in range(-min_ord_x, max_ord_x + 1):
-            for ny in range(-min_ord_y, max_ord_y + 1):
+        nb_ana = 1
+        for nx in range(min_ord_x, max_ord_x + 1):
+            for ny in range(min_ord_y, max_ord_y + 1):
                 gamma = np.sqrt(
-                    0j + k**2 - (kx + nx * 2 * np.pi) ** 2 - (ky + ny * 2 * np.pi) ** 2
+                    0j
+                    + k**2
+                    - (kx + nx * 2 * np.pi / dx) ** 2
+                    - (ky + ny * 2 * np.pi / dy) ** 2
                 )
                 # Computes the (ny, nx) diffracted order
                 if np.abs(np.angle(gamma)) < 1e-4:
                     # Keeping only propagative modes
                     if verbose:
                         print("Found propagative mode nb ", nb_ana, ": gamma =", gamma)
-                    if nb_ana + 1 < p:
-                        ana_kz[0, nb_ana + 1] = gamma
-                        ana_kz[1, nb_ana + 1] = nx
-                        ana_kz[2, nb_ana + 1] = ny
+                    if nb_ana < nb_real:
+                        ana_kz[nb_ana] = gamma
+                        ana_kz_nx[nb_ana] = nx
+                        ana_kz_ny[nb_ana] = ny
                     else:
                         print(
                             "Did not find enough modes! Continuing analytical mode computation, but it will break soon."
                         )
-                        print(V)
+                        print(nb_ana, nb_real, V)
                     nb_ana = nb_ana + 1
                     if (ny == 0) and (nx == 0):
-                        ana_kz[:3, 0] = ana_kz[:3, nb_ana]
                         nb_ana = nb_ana - 1
+                        ana_kz[0] = ana_kz[nb_ana]
+                        ana_kz_nx[0] = ana_kz_nx[nb_ana]
+                        ana_kz_ny[0] = ana_kz_ny[nb_ana]
+                        # ana_kz[:3, 0] = ana_kz[:3, nb_ana]
         # ana_kz = np.array(ana_kz).T
-        nb_ana += 1
 
         # if (np.shape(position)[1] == 2*np.shape(ana_kz)[1]):
         #     ana_kz = np.block([ana_kz, ana_kz])
         #     ana_kz[4, :] = position
         # else:
-        if 2 * nb_ana != p:
-            print("Missing modes! (homogene) expected: ", 2 * nb_ana, " found: ", p)
+        if 2 * nb_ana != nb_real:
+            print(
+                "Missing modes! (homogene) expected: ",
+                2 * nb_ana,
+                " found: ",
+                2 * nb_real,
+            )
 
-        # DEBUGG fortran code "on réplique"
-        ana_kz[:3, nb_ana : 2 * nb_ana] = ana_kz[:3, :nb_ana]
+        # Duplicating propagative modes
+        # (the system is insensitive to polarisation, which is why modes are found twice)
+        ana_kz[nb_ana : 2 * nb_ana] = ana_kz[:nb_ana]
+        ana_kz_nx[nb_ana : 2 * nb_ana] = ana_kz_nx[:nb_ana]
+        ana_kz_ny[nb_ana : 2 * nb_ana] = ana_kz_ny[:nb_ana]
+        # ana_kz[:3, nb_ana : 2 * nb_ana] = ana_kz[:3, :nb_ana]
 
         for i_mod in range(2 * nb_ana):
             # If the mode is propagative, it is in ana_kz
             # and we replace it in V (more precise?)
-            V[int(ana_kz[3, i_mod])] = ana_kz[0, i_mod]
+            V[ana_kz_pos[i_mod]] = ana_kz[i_mod]
 
-        ana_kz[0, 0] = nb_ana  # storing nb_mod of mdoes
+        ana_kz[0] = nb_ana  # storing nb_mod of modes
 
         # Replacing modes
 
         x = 0.0
         for k in range(np.shape(epsilons)[1]):
-            a, b = int_x[k], int_x[k+1]
+            a, b = int_x[k] / dx, int_x[k + 1] / dx
             x = x + base.tfd(a, b, eta, n_mode_x)
         tmp = base.toep(x)
 
@@ -458,34 +568,42 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
         alpha = np.zeros((n_mode_y * n_mode_x, n_mode_y * n_mode_x), dtype=complex)
         for j in range(n_mode_x):
             for k in range(n_mode_x):
-                alpha[j * n_mode_y : (j + 1) * n_mode_y, k * n_mode_y : (k + 1) * n_mode_y] = tmp[j, k] * unite
+                alpha[
+                    j * n_mode_y : (j + 1) * n_mode_y, k * n_mode_y : (k + 1) * n_mode_y
+                ] = (tmp[j, k] * unite)
         y = 0.0
         for k in range(np.shape(epsilons)[0]):
-            a, b = int_y[k], int_y[k+1]
+            a, b = int_y[k] / dy, int_y[k + 1] / dy
             y = y + base.tfd(a, b, eta, n_mode_y)
         tmp = base.toep(y)
 
         beta = np.zeros((n_mode_y * n_mode_x, n_mode_y * n_mode_x), dtype=complex)
         for j in range(n_mode_x):
-            beta[j * n_mode_y : (j + 1) * n_mode_y, j * n_mode_y : (j + 1) * n_mode_y] = tmp
-        for j in range(int(ana_kz[0, 0])):
+            beta[
+                j * n_mode_y : (j + 1) * n_mode_y, j * n_mode_y : (j + 1) * n_mode_y
+            ] = tmp
+        for j in range(nb_ana):
 
             nb_mod = 2048
-            pos_x = np.arange(nb_mod) / nb_mod
+            pos_x = np.arange(nb_mod) / nb_mod * dx
             x = np.zeros(nb_mod, dtype=complex)
             for k in range(nb_mod):
                 x[k] = np.exp(
-                    1.0j * (kx + ana_kz[1, j] * kx) * f(int_x, pos_x[k], eta)
+                    1.0j
+                    * (kx + ana_kz_nx[j] * 2 * np.pi / dx)
+                    * f(int_x, pos_x[k], eta)
                     - 1.0j * kx * pos_x[k]
                 )
             x = np.fft.fft(x) / nb_mod
             x = np.block([x[nb_mod - Mm : nb_mod], x[: Mm + 1]])
 
-            pos_y = np.arange(nb_mod) / nb_mod
+            pos_y = np.arange(nb_mod) / nb_mod * dy
             y = np.zeros(nb_mod, dtype=complex)
             for k in range(nb_mod):
                 y[k] = np.exp(
-                    1.0j * (ky + ana_kz[2, j] * ky) * g(int_y, pos_y[k], eta)
+                    1.0j
+                    * (ky + ana_kz_ny[j] * 2 * np.pi / dy)
+                    * g(int_y, pos_y[k], eta)
                     - 1.0j * ky * pos_y[k]
                 )
             y = np.fft.fft(y) / nb_mod
@@ -497,11 +615,11 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
                 vtmp[l : l + n_mode_y] = x[k] * y
             # vtmp = np.array([vtmp]).T
 
-            E[: n_mode_y * n_mode_x, int(ana_kz[3, j])] = alpha @ vtmp
-            E[n_mode_y * n_mode_x :, int(ana_kz[3, j + np.shape(ana_kz)[1] // 2])] = beta @ vtmp
+            E[: n_mode_y * n_mode_x, ana_kz_pos[j]] = alpha @ vtmp
+            E[n_mode_y * n_mode_x :, ana_kz_pos[j + nb_real // 2]] = beta @ vtmp
         P = np.block([[E], [Lhe @ E @ np.diag(1 / V)]])
 
-        return (P, V), ana_kz
+        return P, V, [ana_kz, ana_kz_nx, ana_kz_ny, ana_kz_pos]
 
     else:
         # Not in a substrate/superstrate, we simply keep the modes
@@ -511,29 +629,30 @@ def homogeneous(epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0,
         ana_kz = []
     P = np.block([[E], [Lhe @ E @ np.diag(1 / V)]])
 
-    return (P, V)
+    return P, V
 
 
-def efficace(a, ext, E):
+def rt_efficiency(epsilon, k0, kx, ky, periodx, periody, ext, E):
     # Computing the total reflected or transmitted energy (depending on the provided vector E)
-    nb_mod = int(np.real(ext[0, 0]))
-    res = np.copy(ext[:4, :nb_mod])
-    k2 = a.eps[0, 0] * a.mu[0, 0] * a.k0**2
+    ext_kz, ext_nx, ext_ny, ext_pos = ext
+    nb_mod = int(np.real(ext_kz[0]))
+    res = np.zeros(nb_mod, dtype=complex)
+    k2 = epsilon * k0**2
 
     for i in range(nb_mod):
-        kxn = a.kx + 2 * np.pi * ext[1, i] / a.nx[-1]
+        kxn = kx + 2 * np.pi * ext_nx[i] / periodx
 
-        kyn = a.ky + 2 * np.pi * ext[2, i] / a.ny[-1]
+        kyn = ky + 2 * np.pi * ext_ny[i] / periody
 
-        ind1 = int(np.real(ext[3, i]))
-        ind2 = int(np.real(ext[3, i + nb_mod]))
+        ind1 = ext_pos[i]
+        ind2 = ext_pos[i + nb_mod]
 
         A = (k2 - kyn**2) * np.abs(E[ind1]) ** 2
         B = (k2 - kxn**2) * np.abs(E[ind2]) ** 2
         C = 2 * kxn * kyn * np.real(E[ind1] * np.conj(E[ind2]))
-        denom = a.mu[0, 0] * ext[0, i + nb_mod]
+        denom = ext_kz[i + nb_mod]
 
-        res[3, i] = (A + B + C) / denom
+        res[i] = (A + B + C) / denom
     return res
 
 
@@ -612,4 +731,3 @@ endfor
 
 
 """
-

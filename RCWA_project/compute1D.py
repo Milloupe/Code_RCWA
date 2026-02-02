@@ -6,7 +6,7 @@ import RCWA_project.base as base
 def compute_PV(struct, wavelength, interfaces, k0, kx, pol, Mm, eta=0):
     """
     Docstring for compute_PV
-    
+
     :param struct: Description
     :param wavelength: Description
     :param interfaces: Description
@@ -20,11 +20,14 @@ def compute_PV(struct, wavelength, interfaces, k0, kx, pol, Mm, eta=0):
     nb_layer = len(struct.layers)
 
     if eta:
+        pml = struct.pmls
         for ilayer in range(nb_layer):
             layer = struct.layers[ilayer]
             epsilons = [mat.get_permittivity(wavelength) for mat in layer]
             mus = [mat.get_permeability(wavelength) for mat in layer]
-            eig_vec, eig_val = stretched(epsilons, mus, interfaces, k0, kx, pol, eta, Mm)
+            eig_vec, eig_val = stretched(
+                epsilons, mus, interfaces, k0, kx, pol, pml, eta, Mm
+            )
             Ps.append(eig_vec)
             Vs.append(eig_val)
     else:
@@ -37,50 +40,81 @@ def compute_PV(struct, wavelength, interfaces, k0, kx, pol, Mm, eta=0):
                 eig_vec, eig_val = homogeneous(epsilon, k0, kx, pol, Mm)
             else:
                 epsilons = [mat.get_permittivity(wavelength) for mat in layer]
-                eig_vec, eig_val = structured(epsilons, interfaces, k0, kx, pol, Mm) 
+                eig_vec, eig_val = structured(epsilons, interfaces, k0, kx, pol, Mm)
 
             Ps.append(eig_vec)
             Vs.append(eig_val)
     return Ps, Vs
 
-def f_times_perm(perm, interfaces, eta, modes):
+
+def f_times_perm(perm, interfaces, pml, eta, modes):
     """
     Computing the Toeplitz matrix for perm * f
     """
     m = 2 * modes + 1
 
-    v = np.zeros(2*m+1, dtype=complex)
-    for j in range(len(interfaces)-1):
+    v = np.zeros(2 * m + 1, dtype=complex)
+    for j in range(len(interfaces) - 1):
         a = interfaces[j]
-        b = interfaces[j+1]
+        b = interfaces[j + 1]
         tfx = base.tfd(a, b, eta, m)
-        v = v + perm[j] * tfx # * (1 + 1.0j * s.pmlx[j])  # f * perm
+        v = v + perm[j] * tfx * (1 + 1.0j * pml[j])  # f * perm
     v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
     T = base.toep(v)
     return T
 
 
-def f_over_perm(perm, interfaces, eta, modes):
+def f_over_perm(perm, interfaces, pml, eta, modes):
     """
     Computing the Toeplitz matrix for f / perm
     """
     m = 2 * modes + 1
 
-    v = np.zeros(2*m+1, dtype=complex)
-    for j in range(len(interfaces)-1):
+    v = np.zeros(2 * m + 1, dtype=complex)
+    for j in range(len(interfaces) - 1):
         a = interfaces[j]
-        b = interfaces[j+1]
+        b = interfaces[j + 1]
         tfx = base.tfd(a, b, eta, m)
-        v = v + 1 / perm[j] * tfx # * (1 + 1.0j * s.pmlx[j])  # f / perm
+        v = v + 1 / perm[j] * tfx * (1 + 1.0j * pml[j])  # f / perm
     v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
     T = base.toep(v)
     return T
 
 
-def stretched(epsilons, mus, interfaces, k0, kx, pol, eta, Mm):
+def f_unstretched(perm, interfaces, pml, eta, modes):
     """
+    Computing the Toeplitz matrix for f / perm
     """
+    m = 2 * modes + 1
 
+    v = np.zeros(2 * m + 1, dtype=complex)
+    for j in range(len(interfaces) - 1):
+        a = interfaces[j]
+        b = interfaces[j + 1]
+        tfx = base.tfd(a, b, 0, m)
+        v = v + 1 / perm[j] * tfx  # 1 / perm
+        if pml[j]:
+            tfx = base.tfd(a, b, eta, m)
+            v = v + 1 / perm[j] * tfx * 1.0j  # 1 / perm
+    v = v * (np.abs(v) > 1e-12 * np.max(np.abs(v)))
+    T = base.toep(v)
+    return T
+
+
+def stretched(epsilons, mus, interfaces, k0, kx, pol, pml, eta, Mm):
+    """
+    Docstring for stretched
+
+    :param epsilons: Description
+    :param mus: Description
+    :param interfaces: Description
+    :param k0: Description
+    :param kx: Description
+    :param pol: Description
+    :param pml: Description
+    :param eta: Description
+    :param Mm: Description
+    """
     # The kx matrix
     alpha = np.diag(kx + 2 * np.pi * np.arange(-Mm, Mm + 1)) + 0j
 
@@ -93,11 +127,11 @@ def stretched(epsilons, mus, interfaces, k0, kx, pol, eta, Mm):
         perm1 = epsilons
         perm2 = mus
 
-    T_f_over_mu = f_over_perm(perm1, interfaces, eta, Mm)
-    T_f_mu = np.linalg.inv(f_times_perm(perm1, interfaces, eta, Mm))
-    T_f_eps = f_times_perm(perm2, interfaces, eta, Mm)
+    T_f_over_mu = f_over_perm(perm1, interfaces, pml, eta, Mm)
+    T_f_mu = np.linalg.inv(f_times_perm(perm1, interfaces, pml, eta, Mm))
+    T_f_eps = f_times_perm(perm2, interfaces, pml, eta, Mm)
 
-    L =  alpha @ T_f_mu @ alpha - k0**2 * T_f_eps
+    L = alpha @ T_f_mu @ alpha - k0**2 * T_f_eps
     M = np.linalg.inv(T_f_over_mu) @ L
     # M represents the eigen value problem given by Maxwell's equations
     V, E = np.linalg.eig(M)
@@ -108,13 +142,12 @@ def stretched(epsilons, mus, interfaces, k0, kx, pol, eta, Mm):
     V = np.real(V) + 1.0j * (np.imag(V) * keep)
     # Keeping positive imaginary part solutions
     neg_val = np.imag(V) < 0
-    V = V * (1 - 2 * neg_val) 
+    V = V * (1 - 2 * neg_val)
 
-    
-    P = np.block([[E],
-                    [L @ E @ np.diag(1/V)]])
+    P = np.block([[E], [-L @ E @ np.diag(1 / V)]])
 
     return P, V
+
 
 def f(s, x):
     """
@@ -143,16 +176,12 @@ def step(eps_diff, beg, end, n):
     w = end - beg
     cen = (end + beg) / 2
 
-    l = np.zeros(2*n+1, dtype=np.complex128)
-    m = np.zeros(2*n+1, dtype=np.complex128)
+    l = np.zeros(2 * n + 1, dtype=np.complex128)
+    m = np.zeros(2 * n + 1, dtype=np.complex128)
 
-    ks = np.arange(0, 2*n+1)
+    ks = np.arange(0, 2 * n + 1)
 
-    tmp = (
-        np.exp(-2j * np.pi * cen * ks)
-        * np.sinc(w * ks)
-        * w
-    )
+    tmp = np.exp(-2j * np.pi * cen * ks) * np.sinc(w * ks) * w
     l = np.conj(tmp) * (eps_diff)
     m = tmp * (eps_diff)
     l[0] = l[0]
@@ -175,12 +204,12 @@ def structured(epsilons, interfaces, k0, kx, pol, Mm, verbose=False):
         # The Toeplitz matrix for the inverse decomposition
         T_inv = 1 / eps_base * np.eye(N, N)
 
-    for k in range(1, len(interfaces)-1):
+    for k in range(1, len(interfaces) - 1):
         # Build the Toeplitz matrices describing the system
         eps_change = epsilons[k]
-        if (eps_change != eps_base):
+        if eps_change != eps_base:
             beg = interfaces[k]
-            end = interfaces[k+1]
+            end = interfaces[k + 1]
 
             T_direct = T_direct + step(eps_change - eps_base, beg, end, Mm)
             if pol == 1:
@@ -201,10 +230,9 @@ def structured(epsilons, interfaces, k0, kx, pol, Mm, verbose=False):
         V = np.real(V) + 1.0j * (np.imag(V) * keep)
         # Keeping positive imaginary part solutions
         neg_val = np.imag(V) < 0
-        V = V * (1 - 2 * neg_val) 
+        V = V * (1 - 2 * neg_val)
 
-        P = np.block([[E],
-                      [E @ np.diag(V)]])
+        P = np.block([[E], [E @ np.diag(V)]])
 
     else:
         # TM
@@ -220,10 +248,9 @@ def structured(epsilons, interfaces, k0, kx, pol, Mm, verbose=False):
         V = np.real(V) + 1.0j * (np.imag(V) * keep)
         # Keeping positive imaginary part solutions
         neg_val = np.imag(V) < 0
-        V = V * (1 - 2 * neg_val) 
+        V = V * (1 - 2 * neg_val)
 
-        P = np.block([[E],
-                      [T_inv @ E @ np.diag(V)]])
+        P = np.block([[E], [T_inv @ E @ np.diag(V)]])
 
     return P, V
 
@@ -239,10 +266,8 @@ def homogeneous(epsilon, k0, kx, pol, Mm, verbose=False):
     V = np.real(V) + 1.0j * (np.imag(V) * keep)
     # Keeping positive imaginary part solutions
     neg_val = np.imag(V) < 0
-    V = V * (1 - 2 * neg_val) 
+    V = V * (1 - 2 * neg_val)
 
-    P = np.block([[np.eye(2*Mm + 1)],
-                  [np.diag(V * (pol / epsilon + (1 - pol)))]])
+    P = np.block([[np.eye(2 * Mm + 1)], [np.diag(V * (pol / epsilon + (1 - pol)))]])
 
     return P, V
-

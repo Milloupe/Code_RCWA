@@ -96,10 +96,8 @@ def interface(P, Q):
     EM field at the interface
     """
     n = int(P.shape[1])
-    A = np.block([[P[0:n, 0:n], -Q[0:n, 0:n]],
-                  [P[n : 2 * n, 0:n], Q[n : 2 * n, 0:n]]])
-    B = np.block([[-P[0:n, 0:n], Q[0:n, 0:n]],
-                  [P[n : 2 * n, 0:n], Q[n : 2 * n, 0:n]]])
+    A = np.block([[P[0:n, 0:n], -Q[0:n, 0:n]], [P[n : 2 * n, 0:n], Q[n : 2 * n, 0:n]]])
+    B = np.block([[-P[0:n, 0:n], Q[0:n, 0:n]], [P[n : 2 * n, 0:n], Q[n : 2 * n, 0:n]]])
     S = np.linalg.inv(A) @ B
     return S
 
@@ -143,11 +141,24 @@ def tfd(a, b, eta, N):
     ba = b - a
 
     for i_mod in range(-N, N + 1):
-        sin_prefac = (1/np.pi * np.sin(np.pi * i_mod * ba) * np.exp(-1.0j * np.pi * i_mod * (b + a))        )
+        sin_prefac = (
+            1
+            / np.pi
+            * np.sin(np.pi * i_mod * ba)
+            * np.exp(-1.0j * np.pi * i_mod * (b + a))
+        )
 
         n_diff = i_mod * ba
         if i_mod == 0:
             fft[N] = ba
+        elif 1 - n_diff == 0:
+            fft[i_mod + N] = sin_prefac * (
+                1 / i_mod - eta / 2 * ba / (1 + n_diff)
+            ) - eta / 2 * ba * np.exp(-2.0j * np.pi * a / ba)
+        elif 1 + n_diff == 0:
+            fft[i_mod + N] = sin_prefac * (
+                1 / i_mod + eta / 2 * ba / (1 - n_diff)
+            ) - eta / 2 * ba * np.exp(2.0j * np.pi * a / ba)
         else:
             stretch = eta / 2 * (ba / (1 - n_diff) - ba / (1 + n_diff))
             # fft[i_mod + N] = prefac * (1/i_mod + eta/2 * (ba/(d-n_diff)-ba/(d+n_diff))) * (exp_kb-exp_ka)

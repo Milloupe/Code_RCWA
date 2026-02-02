@@ -1,5 +1,6 @@
 import numpy as np
 import RCWA_project.compute1D as compute1D
+import RCWA_project.compute2D as compute2D
 import RCWA_project.base as base
 
 """ TODO:
@@ -9,7 +10,6 @@ import RCWA_project.base as base
     (criteria: structure in y has only one zone -> 1D, no phi angle -> pure 1D)
     -> eventually, the 'structure' class will let me check the validity of the structure!
 """
-
 
 
 def coefficient_1D(struct, wavelength, incidence, n_mod, eta=0):
@@ -36,14 +36,14 @@ def coefficient_1D(struct, wavelength, incidence, n_mod, eta=0):
     theta, pol = incidence  # In 1D, only one angle of incidence is necessary
     kx = -k0 * np.sin(theta)
     # Normalize everything
-    k0 = k0
-    kx = kx
 
     # General structure parameters
     interfaces = np.array(struct.interfaces) / struct.period
     nb_layer = len(struct.thicknesses)
-    # pmls = struct.pmls # So far, no pmls in 1D because no stretching
-    Ps, Vs = compute1D.compute_PV(struct, wavelength, interfaces, k0, kx, pol, n_mod, eta=eta)
+
+    Ps, Vs = compute1D.compute_PV(
+        struct, wavelength, interfaces, k0, kx, pol, n_mod, eta=eta
+    )
 
     for ilayer in range(nb_layer):
         thickness = np.array(struct.thicknesses[ilayer]) / struct.period
@@ -54,7 +54,7 @@ def coefficient_1D(struct, wavelength, incidence, n_mod, eta=0):
                 Vs[ilayer],
                 thickness,
             )
-            
+
             # Once inside the system, build the complete system S matrix
             if ilayer > 1:
                 S = base.cascade(S, S_layer)
@@ -72,10 +72,10 @@ def coefficient_1D(struct, wavelength, incidence, n_mod, eta=0):
     return r, t, R, T
 
 
-def coefficient_1D_angle(structure, wavelength, incidence):
+def coefficient_1D_angle(struct, wavelength, incidence):
     """
     This function computes the reflection and transmission coefficients
-    of a 1D structure when the incidence plane is not the same as the structured plane.
+    of a 1D struct when the incidence plane is not the same as the structured plane.
 
     Args:
         struct (Structure): belongs to the Structure class
@@ -95,7 +95,7 @@ def coefficient_1D_angle(structure, wavelength, incidence):
     return None
 
 
-def coefficient_2D(structure, wavelength, incidence):
+def coefficient_2D(struct, wavelength, incidence, n_mod, pmls, eta):
     """
     This function computes the reflection and transmission coefficients
     of a 2D structure.
@@ -103,7 +103,7 @@ def coefficient_2D(structure, wavelength, incidence):
     Args:
         struct (Structure): belongs to the Structure class
         wavelength (float): wavelength of the incidence light (in nm)
-        incidence (list): incidence angles (theta, phi, pol) in radians
+        incidence (list): incidence angles (theta, pol, phi) in radians
 
     returns:
         r (complex): reflection coefficient, phase origin at first interface
@@ -114,8 +114,85 @@ def coefficient_2D(structure, wavelength, incidence):
 
     R and T are the energy coefficients (real quantities)
     """
-    # Do stuff
-    return None
+    k0 = 2 * np.pi / wavelength
+    theta, pol, phi = incidence
+    kx = -k0 * np.sin(theta) * np.cos(phi)
+    ky = -k0 * np.sin(theta) * np.sin(phi)
+    n_mod_x, n_mod_y = n_mod
+
+    # General structure parameters
+    int_x = np.array(struct.int_x)
+    int_y = np.array(struct.int_y)
+    nb_layer = len(struct.thicknesses)
+
+    Ps, Vs, ext = compute2D.compute_PV(
+        struct, wavelength, int_x, int_y, k0, kx, ky, n_mod, pmls, eta=eta
+    )
+
+    for ilayer in range(nb_layer):
+        thickness = np.array(struct.thicknesses[ilayer])
+        # Create the S matrix of the system
+        if ilayer > 0:
+            S_layer = base.c_down(
+                base.interface(Ps[ilayer - 1], Ps[ilayer]),
+                Vs[ilayer],
+                thickness,
+            )
+
+            # Once inside the system, build the complete system S matrix
+            if ilayer > 1:
+                S = base.cascade(S, S_layer)
+            else:
+                S = S_layer
+
+    # Computing the reflected and transmitted coefficients
+    perm_top = struct.get_perm_top(wavelength)
+    perm_bot = struct.get_perm_bot(wavelength)
+    Ex = np.cos(pol) * np.cos(theta) * np.cos(phi) - np.sin(pol) * np.sin(
+        phi
+    )  # Ex incident
+    Ey = np.cos(pol) * np.cos(theta) * np.sin(phi) + np.sin(pol) * np.cos(
+        phi
+    )  # Ey incident
+
+    eps_k2 = perm_top * k0**2  # eps k^2
+    d = np.sqrt(eps_k2 - kx**2 - ky**2)  # norm kz
+    # e = normalisation E
+    norm = (
+        (eps_k2 - ky**2) * np.abs(Ex) ** 2
+        + (eps_k2 - kx**2) * np.abs(Ey) ** 2
+        + 2 * kx * ky * np.real(Ex * Ey)
+    ) / (d)
+
+    ext_kz, _, _, ext_pos = ext
+    nb_mod = np.floor(np.real(ext_kz[0])).astype(int)
+    V_inc = np.zeros(4 * (2 * n_mod_y + 1) * (2 * n_mod_x + 1), dtype=complex)
+    V_inc[ext_pos[0]] = Ex / np.sqrt(norm)
+    V_inc[ext_pos[nb_mod]] = Ey / np.sqrt(norm)
+
+    V_out = S @ V_inc  # outgoing fields
+    V_r = V_out[
+        : 2 * (2 * n_mod_y + 1) * (2 * n_mod_x + 1)
+    ]  # Just the reflected fields
+    V_t = V_out[
+        2 * (2 * n_mod_y + 1) * (2 * n_mod_x + 1) :
+    ]  # Just the transmitted fields
+    reflechi = compute2D.rt_efficiency(
+        perm_top, k0, kx, ky, struct.periodx, struct.periody, ext, V_r
+    )
+    transm = compute2D.rt_efficiency(
+        perm_top, k0, kx, ky, struct.periodx, struct.periody, ext, V_t
+    )
+
+    # We want the main order, but we could look for others
+    r = reflechi[0]
+    t = transm[0]
+
+    kz_t = np.real(Vs[-1][n_mod])
+    R = np.abs(r**2)
+    T = np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot)
+
+    return r, t, R, T
 
 
 def layer(V, h):
@@ -142,7 +219,7 @@ def intermediaire(U, D, mode="A"):
     if mode == "A":
         # Downwards coeff=
         S = np.linalg.inv(np.eye(n) - D00 @ U11) @ D00 @ U10
-    
+
     elif mode == "B":
         # Upwards coeff
         S = np.linalg.inv(np.eye(n) - U11 @ D00) @ U10
@@ -175,7 +252,7 @@ def f_prime(interf, eta, x):
 def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
     """
     Docstring for field
-    
+
     :param S_down: Description
     :param S_up: Description
     :param V: Description
@@ -186,8 +263,8 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
     :param n_mod: Description
     """
     n_term = int(np.shape(D_minus)[0] / 2)
-    
-    n_mod_total = 2*n_mod + 1
+
+    n_mod_total = 2 * n_mod + 1
     exc = np.zeros(n_mod_total)  # excitation
     exc[n_mod] = 1
 
@@ -206,27 +283,26 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
     # print("Debugg layer_field, B ", layer_B)
 
     # The field values, computed at each position in the layer
-    M = np.zeros((ny,nx), dtype = complex)
+    M = np.zeros((ny, nx), dtype=complex)
 
     # print("Debugg layer_field, M shape", np.shape(M), "P shape", np.shape(P))
     # print("Debugg layer_field, S shape", np.shape(S_layer), np.shape(S_up), np.shape(S_down))
 
-
-    kxs = 2 *  np.pi * np.arange(-n_mod, n_mod + 1)
+    kxs = 2 * np.pi * np.arange(-n_mod, n_mod + 1)
     # print("Debugg layer_field, V", V[n_mod], ", kxs", kxs, kxs[n_mod])
     x = np.linspace(0, 1, nx)
     # print("DEBUGG layer_field V", V)
-    
+
     for k in range(ny):
         y = h / ny * k
         # Fourier = np.matmul(P,np.matmul(np.diag(np.exp(1j*V*y)),layer_A) + np.matmul(np.diag(np.exp(1j*V*(h-y))),layer_B))
-        phase_up = np.diag(np.exp(1j * V * (h-y)))
+        phase_up = np.diag(np.exp(1j * V * (h - y)))
         phase_down = np.diag(np.exp(1j * V * y))
         A_phase = phase_up @ layer_A
         B_phase = phase_down @ layer_B
-        Fourier = P[:n_term] @ (A_phase + B_phase) # Fourier decomposition of the field
+        Fourier = P[:n_term] @ (A_phase + B_phase)  # Fourier decomposition of the field
         for i in range(len(kxs)):
-            M[k,:] += Fourier[i] * np.exp(1.0j * x * kxs[i])
+            M[k, :] += Fourier[i] * np.exp(1.0j * x * kxs[i])
         # print("Debug layer_field phasedown", np.diag(phase_down))#, M[k,:])
 
         # # temp = np.fft.ifftshift(Fourier[0:len(Fourier)-1])
@@ -240,7 +316,7 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
     # # We multiply by the phase along x direction (no influence if we plot only the field module)
     M = M * np.exp(1j * kx * x)
 
-    return(M)#/np.abs(np.max(M))
+    return M  # /np.abs(np.max(M))
 
 
 def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None):
@@ -260,13 +336,17 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
         print("Ps and Vs were given")
         Ps, Vs = PV
     else:
-        Ps, Vs = compute1D.compute_PV(struct, wavelength, interfaces, k0, kx, pol, n_mod)
+        Ps, Vs = compute1D.compute_PV(
+            struct, wavelength, interfaces, k0, kx, pol, n_mod
+        )
 
     # Normalisation
 
-    thickness = np.array([wavelength_norm if t == 0 else t/struct.period for t in struct.thicknesses])
+    thickness = np.array(
+        [wavelength_norm if t == 0 else t / struct.period for t in struct.thicknesses]
+    )
 
-    n_mod_total = (2 * n_mod + 1)  
+    n_mod_total = 2 * n_mod + 1
 
     n_layers = len(struct.thicknesses)
 
@@ -283,15 +363,16 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     # Intermediate S matrices starting from the top
     U_plus = []
     U_minus = []
-    U_plus.append(S0) # We use the neutral S matrix at the top, because the fields are already counted from the top
+    U_plus.append(
+        S0
+    )  # We use the neutral S matrix at the top, because the fields are already counted from the top
     U_minus.append(layer(Vs[0], thickness[0]))
     for k in range(n_layers - 1):
         # matlab ref:
         # S{j+1} =cascade(S{j},c_haut(I{j},V{j},thickness(j)));
         S_new = base.cascade(U_plus[k], base.c_up(I[k], Vs[k], thickness[k]))
         U_plus.append(S_new)
-        U_minus.append(base.c_down(S_new, Vs[k+1], thickness[k+1]))
-
+        U_minus.append(base.c_down(S_new, Vs[k + 1], thickness[k + 1]))
 
     # Intermediate S matrices starting from the bottom
     D_minus = []
@@ -300,14 +381,14 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     D_plus.append(layer(Vs[-1], thickness[-1]))
 
     for k in range(n_layers - 1, 0, -1):
-        # matlab ref : 
+        # matlab ref :
         # Q{j+1}=cascade(c_bas(I{n_couches-j},A{n_couches-j+1,2},thickness(n_couches-j+1)),Q{j});
         # n_lay_up = n_layers - (k + 1)
         # print("Debug compute_field_1D, S down", len(Vs), k)
-        
-        S_new = base.cascade(base.c_down(I[k-1], Vs[k], thickness[k]), D_minus[0])
+
+        S_new = base.cascade(base.c_down(I[k - 1], Vs[k], thickness[k]), D_minus[0])
         D_minus.insert(0, S_new)
-        D_plus.insert(0, base.c_up(S_new, Vs[k-1], thickness[k-1]))
+        D_plus.insert(0, base.c_up(S_new, Vs[k - 1], thickness[k - 1]))
 
     # S_down.insert(0, base.c_up(S_down[0], Vs[0], thickness[0]))
 
@@ -328,7 +409,7 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
         nx,
         thickness[0],
         kx,
-        n_mod
+        n_mod,
     )
     # print("Debugg compute_field_1D, ilayer 0, ,M", np.shape(M))
 
@@ -344,19 +425,20 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
             nx,
             thickness[j],
             kx,
-            n_mod
+            n_mod,
         )
         # print("Debugg compute_field_1D, ilayer", j, ", Mnew", np.shape(M_new))
         M = np.append(M, M_new, 0)
     M = np.array(M)
-    # print("Debugg compute_field_1D, M phase", 
-        #   M[0, 0],
-        #   (M[int(ny[0]), 0]),
-        #   (M[int(ny[0])-1, 0]))
+    # print("Debugg compute_field_1D, M phase",
+    #   M[0, 0],
+    #   (M[int(ny[0]), 0]),
+    #   (M[int(ny[0])-1, 0]))
 
     xs = np.linspace(0, struct.period, nx)[::-1]
     zs = np.linspace(0, sum(struct.thicknesses), int(sum(ny)))[::-1]
     return xs, zs, M
+
 
 # def E_field(S_down, S_up, V, P, excitation, ny, h, alpha_0):
 #     """
