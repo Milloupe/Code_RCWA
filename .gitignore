@@ -1,5 +1,5 @@
 mine_RCWA/*
 *.pyc
 .ipynb_checkpoints/
-RCWA.egg_info/*
+RCWA.egg-info/*
 RCWA_project/__pycache__/*

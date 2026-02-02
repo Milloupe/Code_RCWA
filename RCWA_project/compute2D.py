@@ -1,5 +1,5 @@
 import numpy as np
-import RCWA_project.base as base
+import RCWA_project.base_functions as base
 import scipy.linalg as lin
 
 

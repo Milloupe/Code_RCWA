@@ -14,5 +14,5 @@ WIP
 
 ## Contributors
 
-Antoine Moreau (@AnMoreau)
-Pauline Bennet (@Ellawin)
+- Antoine Moreau (@AnMoreau)
+- Pauline Bennet (@Ellawin)

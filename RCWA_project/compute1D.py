@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.linalg as lin
-import RCWA_project.base as base
+import RCWA_project.base_functions as base
 
 
 def compute_PV(struct, wavelength, interfaces, k0, kx, pol, Mm, eta=0):

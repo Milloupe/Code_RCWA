@@ -102,23 +102,36 @@ def interface(P, Q):
     return S
 
 
-# def interface_3D(P, Q, V1, V2, L1, L2):
-#     """
-#         Computation of the scattering matrix of an interface, P and Q being the
-#         matrices given for each layer by homogene, reseau or creneau.
-#         P[:n,   i] is the x component of the mode i
-#         P[n:2:, i] is the y component of the mode i
-#         The S matrix computed is simply the solution to the continuity relations over the
-#         EM field at the interface
-#     """
-#     #TODO: update all this to comply with HDR 1.80
-#     n = int(P.shape[1])
-#     A = np.block([[P[0:n, 0:n], -Q[0:n, 0:n]],
-#                   [P[n:2*n, 0:n], Q[n:2*n, 0:n]]])
-#     B = np.block([[-P[0:n, 0:n], Q[0:n, 0:n]],
-#                   [P[n:2*n, 0:n], Q[n:2*n, 0:n]]])
-#     S = np.linalg.inv(A) @ B
-#     return S
+def layer(V, h):
+    """
+    Computation of the scattering matrix of a layer (just the propagation)
+    """
+    n = len(V)
+    AA = np.diag(np.exp(1j * V * h))
+    C = np.block([[np.zeros((n, n)), AA], [AA, np.zeros((n, n))]])
+    return C
+
+
+def intermediaire(U, D, mode="A"):
+    """
+    Cascading of two scattering matrices, U and D, but specifically when computing
+    intermediate coefficients, and therefore some elements are 0.
+    HDR 1.44
+    """
+    n = U.shape[0] // 2
+    U11 = U[n : 2 * n, n : 2 * n]
+    D00 = D[0:n, 0:n]
+    U10 = U[n : 2 * n, 0:n]
+
+    if mode == "A":
+        # Downwards coeff=
+        S = np.linalg.inv(np.eye(n) - D00 @ U11) @ D00 @ U10
+
+    elif mode == "B":
+        # Upwards coeff
+        S = np.linalg.inv(np.eye(n) - U11 @ D00) @ U10
+
+    return S
 
 
 def genere(ox, nx, eta, n):

@@ -1,7 +1,7 @@
 import numpy as np
 import RCWA_project.compute1D as compute1D
 import RCWA_project.compute2D as compute2D
-import RCWA_project.base as base
+import RCWA_project.base_functions as base
 
 """ TODO:
     - create r, t, R, T functions for 1D, 1D angle and 2D
@@ -195,38 +195,6 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, pmls, eta):
     return r, t, R, T
 
 
-def layer(V, h):
-    """
-    Computation of the scattering matrix of a layer (just the propagation)
-    """
-    n = len(V)
-    AA = np.diag(np.exp(1j * V * h))
-    C = np.block([[np.zeros((n, n)), AA], [AA, np.zeros((n, n))]])
-    return C
-
-
-def intermediaire(U, D, mode="A"):
-    """
-    Cascading of two scattering matrices, U and D, but specifically when computing
-    intermediate coefficients, and therefore some elements are 0.
-    HDR 1.44
-    """
-    n = U.shape[0] // 2
-    U11 = U[n : 2 * n, n : 2 * n]
-    D00 = D[0:n, 0:n]
-    U10 = U[n : 2 * n, 0:n]
-
-    if mode == "A":
-        # Downwards coeff=
-        S = np.linalg.inv(np.eye(n) - D00 @ U11) @ D00 @ U10
-
-    elif mode == "B":
-        # Upwards coeff
-        S = np.linalg.inv(np.eye(n) - U11 @ D00) @ U10
-
-    return S
-
-
 def local_f_prime(a, b, eta, x):
     """
     compute f' on a given segmen
@@ -273,10 +241,10 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
         So to get A-, I need to cascade U+ one last time
         And to get B+, I need to cascade D- one last time
     """
-    layer_A = intermediaire(U_minus, D_minus, mode="A") @ exc
+    layer_A = base.intermediaire(U_minus, D_minus, mode="A") @ exc
     # X = intermediaire(S_up, S_down) @ exc
     # layer_A = X[0:n_term]
-    layer_B = intermediaire(U_plus, D_plus, mode="B") @ exc
+    layer_B = base.intermediaire(U_plus, D_plus, mode="B") @ exc
     # layer_B = X[n_term:2*n_term]
     # print("Debugg layer_field, A ", np.angle(layer_A))
     # print("Debug layer_field, layer", S_down, S_up)
@@ -363,10 +331,9 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     # Intermediate S matrices starting from the top
     U_plus = []
     U_minus = []
-    U_plus.append(
-        S0
-    )  # We use the neutral S matrix at the top, because the fields are already counted from the top
-    U_minus.append(layer(Vs[0], thickness[0]))
+    # We use the neutral S matrix at the top, because the fields are already counted from the top
+    U_plus.append(S0)
+    U_minus.append(base.layer(Vs[0], thickness[0]))
     for k in range(n_layers - 1):
         # matlab ref:
         # S{j+1} =cascade(S{j},c_haut(I{j},V{j},thickness(j)));
@@ -378,7 +345,7 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     D_minus = []
     D_plus = []
     D_minus.append(S0)
-    D_plus.append(layer(Vs[-1], thickness[-1]))
+    D_plus.append(base.layer(Vs[-1], thickness[-1]))
 
     for k in range(n_layers - 1, 0, -1):
         # matlab ref :
