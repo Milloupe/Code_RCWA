@@ -1,2 +1,6 @@
-matplotlib
 numpy
+matplotlib
+scipy
+
+[:python_version >= "3.10"]
+refractiveindex

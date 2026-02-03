@@ -11,6 +11,31 @@ import RCWA_project.base_functions as base
     -> eventually, the 'structure' class will let me check the validity of the structure!
 """
 
+def coefficient(struct, wavelength, incidence, n_mod, pmls=0, eta=0):
+    """
+    Docstring for coefficient
+    
+    :param struct: Description
+    :param wavelength: Description
+    :param incidence: Description
+    :param n_mod: Description
+    :param pml: Description
+    :param eta: Description
+    """
+    # TODO manage edge cases, make sure the dimensions are all right,
+    # maybe streamline a bit
+
+    if struct.type == "1D" and len(incidence) == 2:
+        # 1D structure
+        if not(eta or pmls):
+            # No stretching needed
+            return coefficient_1D(struct, wavelength, incidence, n_mod)
+        else:
+            print("Please use a 2d structure (even pseudo-2D) when stretching",
+                  ", this includes using PMLs")
+    else:
+        return coefficient_2D(struct, wavelength, incidence, n_mod, pmls, eta)
+
 
 def coefficient_1D(struct, wavelength, incidence, n_mod, eta=0):
     """
@@ -242,28 +267,16 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
         And to get B+, I need to cascade D- one last time
     """
     layer_A = base.intermediaire(U_minus, D_minus, mode="A") @ exc
-    # X = intermediaire(S_up, S_down) @ exc
-    # layer_A = X[0:n_term]
     layer_B = base.intermediaire(U_plus, D_plus, mode="B") @ exc
-    # layer_B = X[n_term:2*n_term]
-    # print("Debugg layer_field, A ", np.angle(layer_A))
-    # print("Debug layer_field, layer", S_down, S_up)
-    # print("Debugg layer_field, B ", layer_B)
 
     # The field values, computed at each position in the layer
     M = np.zeros((ny, nx), dtype=complex)
 
-    # print("Debugg layer_field, M shape", np.shape(M), "P shape", np.shape(P))
-    # print("Debugg layer_field, S shape", np.shape(S_layer), np.shape(S_up), np.shape(S_down))
-
     kxs = 2 * np.pi * np.arange(-n_mod, n_mod + 1)
-    # print("Debugg layer_field, V", V[n_mod], ", kxs", kxs, kxs[n_mod])
     x = np.linspace(0, 1, nx)
-    # print("DEBUGG layer_field V", V)
 
     for k in range(ny):
         y = h / ny * k
-        # Fourier = np.matmul(P,np.matmul(np.diag(np.exp(1j*V*y)),layer_A) + np.matmul(np.diag(np.exp(1j*V*(h-y))),layer_B))
         phase_up = np.diag(np.exp(1j * V * (h - y)))
         phase_down = np.diag(np.exp(1j * V * y))
         A_phase = phase_up @ layer_A
@@ -271,17 +284,7 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
         Fourier = P[:n_term] @ (A_phase + B_phase)  # Fourier decomposition of the field
         for i in range(len(kxs)):
             M[k, :] += Fourier[i] * np.exp(1.0j * x * kxs[i])
-        # print("Debug layer_field phasedown", np.diag(phase_down))#, M[k,:])
-
-        # # temp = np.fft.ifftshift(Fourier[0:len(Fourier)-1])
-        # print(f"Debugg layer_field, x shape {np.shape(x)}, kxs shape {np.shape(kxs)}, Fourier shape {np.shape(Fourier)}")
-        # temp = Fourier * np.exp(1.0j * x.T @ kxs)
-        # print(f"Debugg layer_field, axis0 {np.shape(np.sum(temp, axis=0))}, axis1 {np.shape(np.sum(temp, axis=1))}")
-        # M[k,:] = np.sum(Fourier * np.exp(1.0j * x * kxs))
-
-    # M = np.conj(np.fft.ifft(np.conj(M).T, axis = 0)).T * nx
-    # x, y = np.meshgrid(np.linspace(0,1,nx-1), np.linspace(0,1,ny))
-    # # We multiply by the phase along x direction (no influence if we plot only the field module)
+            
     M = M * np.exp(1j * kx * x)
 
     return M  # /np.abs(np.max(M))
@@ -298,7 +301,6 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     theta, pol = incidence  # In 1D, only one angle of incidence is necessary
     k0 = 2 * np.pi / wavelength_norm
     kx = k0 * np.sin(theta)
-    # print(f"Debugg compute_field, k0 {k0}, , kx {kx}, kx/k0 {kx/k0}, period {struct.period}, wav {wavelength}")
 
     if not PV is None:
         print("Ps and Vs were given")
@@ -336,7 +338,6 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     U_minus.append(base.layer(Vs[0], thickness[0]))
     for k in range(n_layers - 1):
         # matlab ref:
-        # S{j+1} =cascade(S{j},c_haut(I{j},V{j},thickness(j)));
         S_new = base.cascade(U_plus[k], base.c_up(I[k], Vs[k], thickness[k]))
         U_plus.append(S_new)
         U_minus.append(base.c_down(S_new, Vs[k + 1], thickness[k + 1]))
@@ -348,18 +349,9 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
     D_plus.append(base.layer(Vs[-1], thickness[-1]))
 
     for k in range(n_layers - 1, 0, -1):
-        # matlab ref :
-        # Q{j+1}=cascade(c_bas(I{n_couches-j},A{n_couches-j+1,2},thickness(n_couches-j+1)),Q{j});
-        # n_lay_up = n_layers - (k + 1)
-        # print("Debug compute_field_1D, S down", len(Vs), k)
-
         S_new = base.cascade(base.c_down(I[k - 1], Vs[k], thickness[k]), D_minus[0])
         D_minus.insert(0, S_new)
         D_plus.insert(0, base.c_up(S_new, Vs[k - 1], thickness[k - 1]))
-
-    # S_down.insert(0, base.c_up(S_down[0], Vs[0], thickness[0]))
-
-    # print("Debugg compute_field_1D, shapes", len(U_plus), len(D_minus))
 
     ny = np.floor(thickness * struct.period / z_res)
     nx = int(np.floor(struct.period / xres))
@@ -378,7 +370,6 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
         kx,
         n_mod,
     )
-    # print("Debugg compute_field_1D, ilayer 0, ,M", np.shape(M))
 
     for j in np.arange(1, n_layers):
         M_new = layer_field(
@@ -394,181 +385,8 @@ def compute_field_1D(struct, wavelength, incidence, z_res, xres, n_mod, PV=None)
             kx,
             n_mod,
         )
-        # print("Debugg compute_field_1D, ilayer", j, ", Mnew", np.shape(M_new))
         M = np.append(M, M_new, 0)
     M = np.array(M)
-    # print("Debugg compute_field_1D, M phase",
-    #   M[0, 0],
-    #   (M[int(ny[0]), 0]),
-    #   (M[int(ny[0])-1, 0]))
-
     xs = np.linspace(0, struct.period, nx)[::-1]
     zs = np.linspace(0, sum(struct.thicknesses), int(sum(ny)))[::-1]
     return xs, zs, M
-
-
-# def E_field(S_down, S_up, V, P, excitation, ny, h, alpha_0):
-#     """
-#     Hopefully, helps compute the fields
-#     TODO: move this to 3D, or 2D slice (ouch)
-#     """
-#     n = int(np.shape(S_down)[0] / 2)
-#     nmod = int((n - 1) / 2)
-#     nx = n
-#     exc = excitation.reshape(excitation.size, 1)
-
-#     Vec = P[:n, :n]  # E field depends on the first half of the components
-
-#     A1 = intermediaire(S_down, cascade(layer(V, h), S_up))
-#     X = A1 @ exc
-#     print("E_field", n, np.shape(X), np.shape(Vec))
-
-#     layer_As = X[0:n]  # intensities of down-going fields
-
-#     A2 = intermediaire(cascade(S_down, layer(V, h)), S_up)
-#     X = A2 @ exc
-#     layer_Bs = X[n : 2 * n]  # intensities of up-going fields
-
-#     Ex = np.zeros((ny, nmod), dtype=complex)
-#     Ey = np.zeros((ny, nmod), dtype=complex)
-#     for k in range(ny):
-#         y = h / ny * (k + 1)
-#         phase_up = np.diag(np.exp(1j * V * y))
-#         phase_down = np.diag(np.exp(1j * V * (h - y)))
-
-#         print("test1", np.shape((phase_up @ layer_As + phase_down @ layer_Bs)))
-#         print("test2", np.shape(Vec))
-#         Fourier = Vec @ (phase_up @ layer_As + phase_down @ layer_Bs)
-#         print("test3", np.shape(Fourier), Fourier)
-#         MM = np.fft.ifftshift(Fourier[0 : len(Fourier) - 1])
-#         print("test4", np.shape(MM), MM)
-#         MM = MM.reshape(len(MM))
-
-#     print(np.shape(np.fft.ifft(MM, axis=0)))
-#     Ex = np.conj(np.fft.ifft(np.conj(Ex).T, axis=0)).T * n
-#     x, y = np.meshgrid(np.linspace(0, 1, nmod), np.linspace(0, 1, ny))
-#     Ex = Ex * np.exp(1j * alpha_0 * x)
-
-#     Ey = np.conj(np.fft.ifft(np.conj(Ey).T, axis=0)).T * n
-#     x, y = np.meshgrid(np.linspace(0, 1, nmod), np.linspace(0, 1, ny))
-#     Ey = Ey * np.exp(1j * alpha_0 * x)
-
-#     return Ex, Ey
-
-
-# def Field_2D(
-#     Ps, Vs, thickness, interf, eta, wavelength, angle, ext, z_res, x_res, n_mod, period
-# ):
-#     """
-#     Hopefully, computing fields
-#     QO:
-#         - in 2D, we normalise wrt the period. Can we not do this in 3D?
-#             Fix idea: if we only ever compute 2D maps (slices), then the period makes sens again
-#     """
-
-#     # Normalisation
-#     wavelength_norm = wavelength / period
-
-#     thickness = np.array([t / period for t in thickness])
-
-#     k0 = 2 * np.pi / wavelength_norm
-#     alpha_0 = k0 * np.sin(angle)
-
-#     n_mod_total = 2 * (2 * n_mod + 1)  # Ex and Ey modes
-#     # TODO: this is wrong ! But I don't know how to fix the rest (yet)
-
-#     n_layers = thickness.size
-
-#     # matrice neutre pour l'opération de cascadage
-#     S11 = np.zeros((n_mod_total, n_mod_total))
-#     S12 = np.eye(n_mod_total)
-#     S0 = np.block([[S11, S12], [S12, S11]])
-#     S_down = []
-#     S_down.append(S0)
-
-#     # matrices d'interface
-#     B = []
-#     for k in range(n_layers - 1):  # car nc - 1 interfaces dans la structure
-#         c = interface(Ps[k], Ps[k + 1])
-#         B.append(c)
-
-#     # Matrices montantes
-#     for k in range(n_layers - 1):
-#         # a = np.array(S_down[k])
-#         b = c_up(np.array(B[k]), np.array(Vs[k]), thickness[k])
-#         S_new = cascade(S_down[k], b)
-#         S_down.append(S_new)
-
-#     a = np.array(S_down[n_layers - 1])
-#     b = np.array(Vs[n_layers - 1])
-#     c = c_down(a, b, thickness[n_layers - 1])
-#     S_down.append(c.tolist())
-
-#     # Matrices descendantes
-#     S_up = []
-#     S_up.append(S0)
-
-#     for k in range(n_layers - 1):
-#         a = np.array(B[n_layers - k - 2])
-#         b = np.array(Vs[n_layers - (k + 1)])
-#         c = thickness[n_layers - (k + 1)]
-#         d = np.array(S_up[k])
-#         Q_new = cascade(c_down(a, b, c), d)
-#         S_up.append(Q_new)
-
-#     # a = np.array(S_up[k])
-#     # b = np.array(Vs[0])
-#     c = c_up(S_up[-1], Vs[0], thickness[0])
-#     S_up.append(c)
-
-#     exc = np.zeros(2 * n_mod_total)  # excitation
-#     # Eclairage par au dessus, onde plane
-#     exc[ext] = 1
-#     # eclairage par en dessous, onde plane
-#     # exc[n_mod_total + n_mod] = 1
-#     # eclairage par en dessous, guide d'onde (le mode avec la plus grande partie réelle)
-#     # position = np.argmax(np.real(Vdown))
-
-#     ny = np.floor(thickness * period / z_res)
-#     print("sizes", ny)
-
-#     M = E_field(
-#         np.array(S_down[0]),
-#         np.array(S_up[n_layers - 0 - 1]),
-#         np.array(Vs[0]),
-#         np.array(Ps[0]),
-#         exc,
-#         int(ny[0]),
-#         thickness[0],
-#         alpha_0,
-#     )
-
-#     for j in np.arange(1, n_layers):
-#         M_new = E_field(
-#             np.array(S_down[j]),
-#             np.array(S_up[n_layers - j - 1]),
-#             np.array(Vs[j]),
-#             np.array(Ps[j]),
-#             exc,
-#             int(ny[j]),
-#             thickness[j],
-#             alpha_0,
-#         )
-#         M = np.append(M, M_new, 0)
-
-#     nx = int(np.shape(S_down[0])[0] / 2)
-#     xs_fft = np.linspace(0, 1, nx - 1) * period
-#     xs_real = np.arange(0, period, x_res)
-#     # print(np.shape(M), np.shape(xs_fft), nx, np.shape(S_down), xs_real)
-
-#     z_len = len(M)
-#     M_real = np.zeros((z_len, len(xs_real)), dtype=complex)
-#     mem = np.array(M)
-#     fprime = f_prime(interf, eta, xs_fft)
-#     for i in range(z_len):
-#         # print("pop", fprime)
-#         M[i] = M[i] / fprime
-#         M_real[i] = np.interp(xs_real, xs_fft, M[i], period=period)
-
-#     # Mfield = np.abs(M) ** 2
-#     return M, mem

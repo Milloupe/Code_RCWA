@@ -1,13 +1,19 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: RCWA
 Version: 0.9
-Summary: A Rigorous Coupled Wava Analysis library for optical simulations.
-Home-page: https://github.com/Milloupe/Code_RCWA
-Author: Denis Langevin
-Author-email: denis.langevin@uca.fr
-License: GPLv3+
-Keywords: RCWA,Maxwell,Optics,Multilayers,Plasmonics,Photovoltaics
-Platform: UNKNOWN
+Summary: A scattering matrix formalism to solve Maxwell's equations in any structure.
+Author-email: Denis Langevin <denis.langevin@univ-amu.fr>, Antoine Moreau <antoine.moreau@uca.fr>
+License: MIT
+Keywords: Plasmonics,Photonics
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Physics
+Classifier: Programming Language :: Python :: 3
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: matplotlib
+Requires-Dist: scipy
+Requires-Dist: refractiveindex; python_version >= "3.10"
 
 # RCWA
 
@@ -25,7 +31,5 @@ WIP
 
 ## Contributors
 
-Antoine Moreau (@AnMoreau)
-Pauline Bennet (@Ellawin)
-
-
+- Antoine Moreau (@AnMoreau)
+- Pauline Bennet (@Ellawin)

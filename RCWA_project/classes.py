@@ -84,16 +84,37 @@ class Structure:
 
         self.layers = layers
         self.thicknesses = thicknesses
+
+        if not(len(interfaces) == len(pmls) == len(np.shape(layers))):
+            print("2D structures should have 2 interface lists,"
+            "2 PML lists and 2 dimensional layer definitions.")
+            print(f"Here: len(interfaces)={len(interfaces)},",
+                  f" len(pmls)={len(pmls)}, len(np.shape(layers))={len(np.shape(layers))}")
+            return None
         if len(np.shape(layers[0])) == 1:
             self.interfaces = interfaces
-            self.period = interfaces[-1]
+            if (len(self.interfaces) > 1):
+                self.period = interfaces[-1]
+            else:
+                print("Interface lists should at least contain the beginning",
+                      " and end of the period, so no less than 2 values.")
+                return None
             self.type = "1D"
         elif len(np.shape(layers[0])) == 2:
             self.int_x = interfaces[0]
             self.int_y = interfaces[1]
-            self.periodx = self.int_x[-1]
-            self.periody = self.int_y[-1]
-            self.type = "2D"
+            if (len(self.int_x) > 1) and (len(self.int_y) > 1):
+                self.periodx = self.int_x[-1]
+                self.periody = self.int_y[-1]
+            else:
+                print("Interface lists should at least contain the beginning",
+                      " and end of the period, so no less than 2 values.")
+                return None
+            if (len(self.int_y) > 2):
+                self.type = "2D"
+            else:
+                # Only one zone in the y direction, we are in 1D
+                self.type = "pseudo_2D"
         else:
             print("There should be either one array of interfaces or two")
             return None

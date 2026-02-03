@@ -3,3 +3,4 @@ mine_RCWA/*
 .ipynb_checkpoints/
 RCWA.egg-info/*
 RCWA_project/__pycache__/*
+RCWA.egg-info/PKG-INFO
