@@ -84,13 +84,8 @@ class Structure:
 
         self.layers = layers
         self.thicknesses = thicknesses
+        
 
-        if not(len(interfaces) == len(pmls) == len(np.shape(layers))):
-            print("2D structures should have 2 interface lists,"
-            "2 PML lists and 2 dimensional layer definitions.")
-            print(f"Here: len(interfaces)={len(interfaces)},",
-                  f" len(pmls)={len(pmls)}, len(np.shape(layers))={len(np.shape(layers))}")
-            return None
         if len(np.shape(layers[0])) == 1:
             self.interfaces = interfaces
             if (len(self.interfaces) > 1):
@@ -101,6 +96,12 @@ class Structure:
                 return None
             self.type = "1D"
         elif len(np.shape(layers[0])) == 2:
+            if not(len(interfaces) == len(pmls) == len(np.shape(layers[0]))):
+                print("2D structures should have 2 interface lists,"
+                "2 PML lists and 2 dimensional layer definitions.")
+                print(f"Here: len(interfaces)={len(interfaces)},",
+                    f" len(pmls)={len(pmls)}, len(np.shape(layers))={len(np.shape(layers))}")
+                return None
             self.int_x = interfaces[0]
             self.int_y = interfaces[1]
             if (len(self.int_x) > 1) and (len(self.int_y) > 1):
