@@ -4,3 +4,4 @@ mine_RCWA/*
 RCWA.egg-info/*
 RCWA_project/__pycache__/*
 RCWA.egg-info/PKG-INFO
+build/*
