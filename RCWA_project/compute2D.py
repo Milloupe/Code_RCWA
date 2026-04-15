@@ -3,7 +3,7 @@ import RCWA_project.base_functions as base
 import scipy.linalg as lin
 
 
-def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, pml, eta=0):
+def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, eta=0):
     """
     Docstring for compute_PV
 
@@ -18,6 +18,7 @@ def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, pml, eta=0):
     Ps = []
     Vs = []
     nb_layer = len(struct.layers)
+    pml = struct.pmls
 
     if not (struct.homo_layer[0]):
         print(

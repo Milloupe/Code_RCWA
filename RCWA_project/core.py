@@ -120,7 +120,7 @@ def coefficient_1D_angle(struct, wavelength, incidence):
     return None
 
 
-def coefficient_2D(struct, wavelength, incidence, n_mod, pmls, eta):
+def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
     """
     This function computes the reflection and transmission coefficients
     of a 2D structure.
@@ -151,7 +151,7 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, pmls, eta):
     nb_layer = len(struct.thicknesses)
 
     Ps, Vs, ext = compute2D.compute_PV(
-        struct, wavelength, int_x, int_y, k0, kx, ky, n_mod, pmls, eta=eta
+        struct, wavelength, int_x, int_y, k0, kx, ky, n_mod, eta=eta
     )
 
     for ilayer in range(nb_layer):
