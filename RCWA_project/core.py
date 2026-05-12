@@ -210,14 +210,17 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
     )
 
     # We want the main order, but we could look for others
-    r = reflechi[0]
-    t = transm[0]
+    R = np.real(reflechi[0])
+    T = np.real(transm[0])
+    # Apparently, efficiency directly computes the Poynting vector ratio,
+    # so there we don't have access to amplitude coefficients easily
 
-    kz_t = np.real(Vs[-1][nb_mod])
-    R = np.abs(r**2)
-    T = np.real(np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot))
+    # kz_t = ext_kz[nb_mod]
+    # print(nb_mod, ext_pos, ext_kz, kz_t, k0 * np.cos(theta), perm_top, perm_bot)
+    # R = np.abs(r**2)
+    # T = np.real(np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot))
 
-    return r, t, R, T
+    return R, T
 
 
 def local_f_prime(a, b, eta, x):
