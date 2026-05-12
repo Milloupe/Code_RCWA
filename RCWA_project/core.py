@@ -213,9 +213,9 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
     r = reflechi[0]
     t = transm[0]
 
-    kz_t = np.real(Vs[-1][n_mod])
+    kz_t = np.real(Vs[-1][nb_mod])
     R = np.abs(r**2)
-    T = np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot)
+    T = np.real(np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot))
 
     return r, t, R, T
 
