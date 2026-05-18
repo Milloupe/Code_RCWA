@@ -120,7 +120,7 @@ def coefficient_1D_angle(struct, wavelength, incidence):
     return None
 
 
-def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
+def coefficient_2D(struct, wavelength, incidence, n_mod, eta, mode="specular"):
     """
     This function computes the reflection and transmission coefficients
     of a 2D structure.
@@ -150,7 +150,7 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
     int_y = np.array(struct.int_y)
     nb_layer = len(struct.thicknesses)
 
-    Ps, Vs, ext = compute2D.compute_PV(
+    Ps, Vs, ext_top, ext_bot = compute2D.compute_PV(
         struct, wavelength, int_x, int_y, k0, kx, ky, n_mod, eta=eta
     )
 
@@ -189,7 +189,7 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
         + 2 * kx * ky * np.real(Ex * Ey)
     ) / (d)
 
-    ext_kz, _, _, ext_pos = ext
+    ext_kz, _, _, ext_pos = ext_top
     nb_mod = np.floor(np.real(ext_kz[0])).astype(int)
     V_inc = np.zeros(4 * (2 * n_mod_y + 1) * (2 * n_mod_x + 1), dtype=complex)
     V_inc[ext_pos[0]] = Ex / np.sqrt(norm)
@@ -203,14 +203,15 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
         2 * (2 * n_mod_y + 1) * (2 * n_mod_x + 1) :
     ]  # Just the transmitted fields
     reflechi = compute2D.rt_efficiency(
-        perm_top, k0, kx, ky, struct.periodx, struct.periody, ext, V_r
+        perm_top, k0, kx, ky, struct.periodx, struct.periody, ext_top, V_r
     )
     transm = compute2D.rt_efficiency(
-        perm_top, k0, kx, ky, struct.periodx, struct.periody, ext, V_t
+        perm_bot, k0, kx, ky, struct.periodx, struct.periody, ext_bot, V_t
     )
 
     # We want the main order, but we could look for others
     R = np.real(reflechi[0])
+    # print(transm)
     T = np.real(transm[0])
     # Apparently, efficiency directly computes the Poynting vector ratio,
     # so there we don't have access to amplitude coefficients easily
@@ -219,7 +220,8 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta):
     # print(nb_mod, ext_pos, ext_kz, kz_t, k0 * np.cos(theta), perm_top, perm_bot)
     # R = np.abs(r**2)
     # T = np.real(np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot))
-
+    if mode == "all":
+        return np.sum(reflechi), np.sum(transm)
     return R, T
 
 

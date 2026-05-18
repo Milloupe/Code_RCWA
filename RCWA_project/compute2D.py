@@ -20,9 +20,9 @@ def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, eta=0):
     nb_layer = len(struct.layers)
     pml = struct.pmls
 
-    if not (struct.homo_layer[0]):
+    if not (struct.homo_layer[0] and struct.homo_layer[-1]):
         print(
-            "The first layer must be homogeneous, otherwise planewaves don't make sense"
+            "The first and last layers must be homogeneous, otherwise planewaves don't make sense"
         )
         return None
     else:
@@ -31,12 +31,12 @@ def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, eta=0):
             [[m.get_permittivity(wavelength) for m in mat] for mat in layer]
         )
         mus = np.array([[m.get_permeability(wavelength) for m in mat] for mat in layer])
-        eig_vec, eig_val, ext = homogeneous(
+        eig_vec, eig_val, ext_top = homogeneous(
             epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=1
         )
         Ps.append(eig_vec)
         Vs.append(eig_val)
-    for ilayer in range(1, nb_layer):
+    for ilayer in range(1, nb_layer-1):
         layer = struct.layers[ilayer]
         homo = struct.homo_layer[ilayer]
         if homo:
@@ -62,7 +62,18 @@ def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, eta=0):
 
         Ps.append(eig_vec)
         Vs.append(eig_val)
-    return Ps, Vs, ext
+    # Last - and homogeneous - layer
+    layer = struct.layers[-1]
+    epsilons = np.array(
+        [[m.get_permittivity(wavelength) for m in mat] for mat in layer]
+    )
+    mus = np.array([[m.get_permeability(wavelength) for m in mat] for mat in layer])
+    eig_vec, eig_val, ext_bot = homogeneous(
+        epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=1
+    )
+    Ps.append(eig_vec)
+    Vs.append(eig_val)
+    return Ps, Vs, ext_top, ext_bot
 
 
 def eps_x(perm, int_x, int_y, pml, eta, modes):
@@ -393,7 +404,7 @@ def homogeneous(
     epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0, verbose=False
 ):
     """
-    Computing modes and eignevalues in a homogeneous layer
+    Computing modes and eigenvalues in a homogeneous layer
     Takes into account the possibility that it is the first or last layer
     (ext), in which case we match with propagative modes
     """
@@ -540,7 +551,7 @@ def homogeneous(
                 "Missing modes! (homogene) expected: ",
                 2 * nb_ana,
                 " found: ",
-                2 * nb_real,
+                nb_real,
             )
 
         # Duplicating propagative modes
