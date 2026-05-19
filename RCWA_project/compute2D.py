@@ -68,9 +68,17 @@ def compute_PV(struct, wavelength, int_x, int_y, k0, kx, ky, modes, eta=0):
         [[m.get_permittivity(wavelength) for m in mat] for mat in layer]
     )
     mus = np.array([[m.get_permeability(wavelength) for m in mat] for mat in layer])
-    eig_vec, eig_val, ext_bot = homogeneous(
-        epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=1
-    )
+    if (np.isreal(epsilons[0,0]) and np.real(epsilons[0,0])>0):
+        # permittivity of the substrate is real and positive
+        eig_vec, eig_val, ext_bot = homogeneous(
+            epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=1
+        )
+    else:
+        # Absorbing / lossy substrate: no transmission
+        eig_vec, eig_val = homogeneous(
+            epsilons, mus, int_x, int_y, k0, kx, ky, modes, pml, eta, ext=0
+        )
+        ext_bot = 0
     Ps.append(eig_vec)
     Vs.append(eig_val)
     return Ps, Vs, ext_top, ext_bot

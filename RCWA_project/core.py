@@ -205,23 +205,20 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta, mode="specular"):
     reflechi = compute2D.rt_efficiency(
         perm_top, k0, kx, ky, struct.periodx, struct.periody, ext_top, V_r
     )
-    transm = compute2D.rt_efficiency(
-        perm_bot, k0, kx, ky, struct.periodx, struct.periody, ext_bot, V_t
-    )
-
-    # We want the main order, but we could look for others
     R = np.real(reflechi[0])
-    # print(transm)
-    T = np.real(transm[0])
-    # Apparently, efficiency directly computes the Poynting vector ratio,
-    # so there we don't have access to amplitude coefficients easily
 
-    # kz_t = ext_kz[nb_mod]
-    # print(nb_mod, ext_pos, ext_kz, kz_t, k0 * np.cos(theta), perm_top, perm_bot)
-    # R = np.abs(r**2)
-    # T = np.real(np.abs(t) ** 2 * kz_t / (k0 * np.cos(theta)) * (perm_top / perm_bot))
+    if (np.isreal(perm_bot) and np.real(perm_bot)>0):
+        # Non-lossy, transmitting substrate
+        transm = compute2D.rt_efficiency(
+            perm_bot, k0, kx, ky, struct.periodx, struct.periody, ext_bot, V_t
+        )
+        T = np.real(transm[0])
+    else:
+        transm = 0
+        T = 0
+
     if mode == "all":
-        return np.sum(reflechi), np.sum(transm)
+        return reflechi, transm
     return R, T
 
 
