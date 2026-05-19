@@ -7,7 +7,7 @@ name = "RCWA"
 authors = [
   {name = "Denis Langevin", email = "denis.langevin@univ-amu.fr"},
   {name = "Antoine Moreau", email = "antoine.moreau@uca.fr"}]
-version = "0.9"
+version = "1.0"
 description = "A scattering matrix formalism to solve Maxwell's equations in any structure."
 readme = "README.md"
 requires-python = ">=3.7"
