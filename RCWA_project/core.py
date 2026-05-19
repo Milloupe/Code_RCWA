@@ -11,10 +11,11 @@ import RCWA_project.base_functions as base
     -> eventually, the 'structure' class will let me check the validity of the structure!
 """
 
+
 def coefficient(struct, wavelength, incidence, n_mod, pmls=0, eta=0):
     """
     Docstring for coefficient
-    
+
     :param struct: Description
     :param wavelength: Description
     :param incidence: Description
@@ -27,12 +28,14 @@ def coefficient(struct, wavelength, incidence, n_mod, pmls=0, eta=0):
 
     if struct.type == "1D" and len(incidence) == 2:
         # 1D structure
-        if not(eta or pmls):
+        if not (eta or pmls):
             # No stretching needed
             return coefficient_1D(struct, wavelength, incidence, n_mod)
         else:
-            print("Please use a 2d structure (even pseudo-2D) when stretching",
-                  ", this includes using PMLs")
+            print(
+                "Please use a 2d structure (even pseudo-2D) when stretching",
+                ", this includes using PMLs",
+            )
     else:
         return coefficient_2D(struct, wavelength, incidence, n_mod, pmls, eta)
 
@@ -207,7 +210,7 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta, mode="specular"):
     )
     R = np.real(reflechi[0])
 
-    if (np.isreal(perm_bot) and np.real(perm_bot)>0):
+    if np.isreal(perm_bot) and np.real(perm_bot) > 0:
         # Non-lossy, transmitting substrate
         transm = compute2D.rt_efficiency(
             perm_bot, k0, kx, ky, struct.periodx, struct.periody, ext_bot, V_t
@@ -286,7 +289,7 @@ def layer_field(D_minus, U_minus, D_plus, U_plus, V, P, ny, nx, h, kx, n_mod):
         Fourier = P[:n_term] @ (A_phase + B_phase)  # Fourier decomposition of the field
         for i in range(len(kxs)):
             M[k, :] += Fourier[i] * np.exp(1.0j * x * kxs[i])
-            
+
     M = M * np.exp(1j * kx * x)
 
     return M  # /np.abs(np.max(M))

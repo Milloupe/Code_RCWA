@@ -21,6 +21,6 @@
 
 """
 __name__ = "RCWA"
-__version__ = "0.9"
-__date__ = "10/17/2024"  # MM/DD/YYY
+__version__ = "1.0"
+__date__ = "05/19/2026"  # MM/DD/YYY
 __author__ = "Denis Langevin"
