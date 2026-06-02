@@ -509,10 +509,21 @@ def homogeneous(
         # Compute the analytical eigen values (Rayleigh decomposition)
 
         k = np.sqrt(epsilons[0, 0] * mus[0, 0]) * k0  # DEBUGG CHANGED [1, 1] TO [0, 0]
-        min_kx = (k + kx) * dx / 2 * np.pi
-        max_kx = (k - kx) * dx / 2 * np.pi
-        min_ky = (k + ky) * dy / 2 * np.pi
-        max_ky = (k - ky) * dy / 2 * np.pi
+        pmlx, pmly = pml
+        if np.sum(pmlx) > 0:
+            # We have some pmls on x
+            min_kx = max_kx = 0    
+        else:
+            min_kx = (k + kx) * dx / (2 * np.pi)
+            max_kx = (k - kx) * dx / (2 * np.pi)
+        
+        if np.sum(pmly) > 0:
+            # We have some pmls on y
+            min_ky = max_ky = 0
+        else:
+            min_ky = (k + ky) * dy / (2 * np.pi)
+            max_ky = (k - ky) * dy / (2 * np.pi)
+
         min_ord_x = -np.floor(np.real(min_kx)).astype(int)
         max_ord_x = np.floor(np.real(max_kx)).astype(int)
         min_ord_y = -np.floor(np.real(min_ky)).astype(int)
@@ -547,13 +558,7 @@ def homogeneous(
                         ana_kz[0] = ana_kz[nb_ana]
                         ana_kz_nx[0] = ana_kz_nx[nb_ana]
                         ana_kz_ny[0] = ana_kz_ny[nb_ana]
-                        # ana_kz[:3, 0] = ana_kz[:3, nb_ana]
-        # ana_kz = np.array(ana_kz).T
 
-        # if (np.shape(position)[1] == 2*np.shape(ana_kz)[1]):
-        #     ana_kz = np.block([ana_kz, ana_kz])
-        #     ana_kz[4, :] = position
-        # else:
         if 2 * nb_ana != nb_real:
             print(
                 "Missing modes! (homogene) expected: ",
