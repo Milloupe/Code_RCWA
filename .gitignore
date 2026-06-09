@@ -5,3 +5,4 @@ RCWA.egg-info/*
 RCWA_project/__pycache__/*
 RCWA.egg-info/PKG-INFO
 build/*
+C2N_design/*
