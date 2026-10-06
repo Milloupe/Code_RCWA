@@ -134,8 +134,6 @@ def coefficient_2D(struct, wavelength, incidence, n_mod, eta, mode="specular"):
         incidence (list): incidence angles (theta, pol, phi) in radians
 
     returns:
-        r (complex): reflection coefficient, phase origin at first interface
-        t (complex): transmission coefficient
         R (float): Reflectance (energy reflection)
         T (float): Transmittance (energie transmission)
 
